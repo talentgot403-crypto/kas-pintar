@@ -255,7 +255,7 @@ export function buildSeed(now: Date): { transactions: Transaction[]; budgets: Bu
     txs.push({ id: `seed-${String(n).padStart(3, "0")}`, date: day(monthsAgo, d), description, category, type, amount, status });
   };
 
-  add(5, 2, "Saldo awal kas organisasi", "Lainnya", "masuk", 12_500_000);
+  add(6, 28, "Saldo awal kas organisasi", "Lainnya", "masuk", 12_500_000);
   const wiggle = [1, 1.08, 0.94, 1.12, 0.97, 1.05];
   for (let m = 5; m >= 1; m--) {
     const w = wiggle[m] ?? 1;

@@ -286,7 +286,7 @@ function Dashboard() {
                       <li key={c.category} className="flex items-center gap-2 text-sm">
                         <span className="size-2.5 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
                         <span className="flex-1 text-muted-foreground">{c.category}</span>
-                        <span className="num font-semibold">{formatCompact(c.amount)}</span>
+                        <span className="num whitespace-nowrap font-semibold">{formatCompact(c.amount)}</span>
                       </li>
                     ))}
                   </ul>

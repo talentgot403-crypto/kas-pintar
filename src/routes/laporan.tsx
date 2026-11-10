@@ -175,8 +175,8 @@ function LaporanPage() {
                             {r.status === "menunggu" && <span className="ml-1 text-xs text-warning-foreground">(menunggu)</span>}
                           </td>
                           <td className="py-2 text-muted-foreground">{r.category}</td>
-                          <td className="num py-2 text-right text-success">{r.type === "masuk" ? formatRupiah(r.amount) : "—"}</td>
-                          <td className="num py-2 text-right">{r.type === "keluar" ? formatRupiah(r.amount) : "—"}</td>
+                          <td className="num py-2 text-right text-success">{r.type === "masuk" ? formatRupiah(r.amount) : <span className="text-muted-foreground">—</span>}</td>
+                          <td className="num py-2 text-right">{r.type === "keluar" ? formatRupiah(r.amount) : <span className="text-muted-foreground">—</span>}</td>
                         </tr>
                       ))}
                   </tbody>
@@ -197,7 +197,7 @@ function LaporanPage() {
           </>
         )}
       </Panel>
-      <p className="mt-4 text-center text-xs capitalize text-muted-foreground print:hidden">
+      <p className="mt-4 text-center text-xs text-muted-foreground print:hidden">
         Dibuat otomatis oleh SIKeu · {monthLabel(now, true)}
       </p>
     </>
