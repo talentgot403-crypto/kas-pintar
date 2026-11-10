@@ -34,3 +34,4 @@ use the editor.
 - Finance rules (totals, budget usage, filters, role permissions) live as pure functions in `src/lib/finance.ts` with tests in `src/lib/finance.test.ts`; UI only calls them, so rules stay testable in one place.
 - App data is a client-side simulation in `src/lib/finance-store.tsx` (React context + localStorage, seeded relative to today); swap this module for a backend when real persistence is needed.
 - Shared shell (sidebar, header, role switcher) wraps `<Outlet />` in `src/routes/__root.tsx`; each menu item is its own route file.
+- AI calls go through Lovable AI Gateway from server-only modules in `src/lib/ai/*.server.ts`, exposed via `createServerFn` in `src/lib/*.functions.ts`; candidate selection and output sanitising stay pure in `src/lib/finance.ts` so the AI can only return valid categories and known transaction IDs.

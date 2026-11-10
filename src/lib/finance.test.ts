@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { budgetUsage, filterTransactions, ROLES, summarize, type Transaction } from "./finance";
+import { budgetUsage, duplicateCandidates, filterTransactions, ROLES, sanitizeAnalysis, summarize, type Transaction } from "./finance";
 
 const now = new Date(2026, 10, 15); // 15 Nov 2026
 
@@ -59,5 +59,38 @@ describe("finance rules", () => {
     expect(ROLES.ketua.canApprove).toBe(true);
     expect(ROLES.bendahara.canApprove).toBe(false);
     expect(ROLES.anggota.canExport).toBe(false);
+  });
+});
+
+describe("AI helper rules", () => {
+  const draft = { date: "2026-11-10", description: "Konsumsi rapat", type: "keluar" as const, amount: 500_000 };
+
+  it("only compares same-type, non-cancelled transactions within 30 days", () => {
+    const txs = [
+      tx({ id: "ok", type: "keluar", date: "2026-10-12" }),
+      tx({ id: "too-old", type: "keluar", date: "2026-10-10" }),
+      tx({ id: "income", type: "masuk", date: "2026-11-10" }),
+      tx({ id: "cancelled", type: "keluar", date: "2026-11-10", status: "dibatalkan" }),
+    ];
+    expect(duplicateCandidates(draft, txs).map((t) => t.id)).toEqual(["ok"]);
+  });
+
+  it("puts equal amounts first and sends at most 25 candidates", () => {
+    const txs = Array.from({ length: 30 }, (_, i) =>
+      tx({ id: `t${i}`, type: "keluar", date: "2026-11-09", amount: i === 29 ? 500_000 : 1 }),
+    );
+    const out = duplicateCandidates(draft, txs);
+    expect(out).toHaveLength(25);
+    expect(out[0]?.id).toBe("t29");
+  });
+
+  it("drops a suggested category not valid for the transaction type and unknown duplicate ids", () => {
+    const out = sanitizeAnalysis(
+      { category: "Iuran", confidence: "tinggi", reason: "x", duplicates: [{ id: "a", reason: "" }, { id: "zzz", reason: "" }] },
+      "keluar",
+      ["a"],
+    );
+    expect(out.category).toBeNull();
+    expect(out.duplicates.map((d) => d.id)).toEqual(["a"]);
   });
 });
