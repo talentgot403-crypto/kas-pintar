@@ -45,7 +45,7 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
   const [errors, setErrors] = useState<Errors>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
-  const [analysis, setAnalysis] = useState<AiAnalysis | null>(null);
+  const [result, setResult] = useState<{ key: string; analysis: AiAnalysis } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -56,7 +56,7 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
       setAmount("");
       setStatus("selesai");
       setErrors({});
-      setAnalysis(null);
+      setResult(null);
       setAiError("");
       setAiLoading(false);
     }
@@ -65,11 +65,9 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
   const categories = categoriesFor(type);
   const numeric = Number(amount.replace(/\D/g, ""));
 
-  // Hasil AI hanya berlaku untuk isian yang dianalisis; reset bila isian berubah.
-  useEffect(() => {
-    setAnalysis(null);
-    setAiError("");
-  }, [type, date, description, numeric]);
+  // Hasil AI hanya berlaku untuk isian yang dianalisis; disembunyikan bila isian berubah.
+  const inputKey = `${type}|${date}|${description.trim()}|${numeric}`;
+  const analysis = result && result.key === inputKey ? result.analysis : null;
 
   const byId = useMemo(() => new Map(transactions.map((t) => [t.id, t])), [transactions]);
   const duplicateRows = (analysis?.duplicates ?? []).flatMap((d) => {
@@ -91,11 +89,8 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
         setAiError(res.error);
         return;
       }
-      // Tunda agar efek reset di atas tidak menghapus hasil baru.
-      setTimeout(() => {
-        setAnalysis(res.analysis);
-        if (res.analysis.category && !category) setCategory(res.analysis.category);
-      });
+      setResult({ key: inputKey, analysis: res.analysis });
+      if (res.analysis.category && !category) setCategory(res.analysis.category);
     } catch {
       setAiError("Saran AI sedang tidak tersedia. Coba lagi nanti.");
     } finally {
