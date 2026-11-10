@@ -97,7 +97,7 @@ function LaporanPage() {
             </>
           ) : (
             <p className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-              <Lock className="size-3.5" /> Ekspor hanya untuk Bendahara & Ketua
+              <Lock className="size-3.5" /> Ekspor hanya untuk Bendahara & Pembina
             </p>
           )
         }
@@ -186,8 +186,8 @@ function LaporanPage() {
 
             <div className="mt-8 hidden grid-cols-2 gap-8 text-center text-sm print:grid">
               <div>
-                <p>Mengetahui, Ketua</p>
-                <p className="mt-16 font-semibold">Budi Santoso</p>
+                <p>Mengetahui, Pembina OSIS</p>
+                <p className="mt-16 font-semibold">Dra. Hartini, M.Pd.</p>
               </div>
               <div>
                 <p>Bendahara Utama</p>

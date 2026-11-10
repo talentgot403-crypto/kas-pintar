@@ -39,8 +39,9 @@ const NAV = [
 
 export const ROLE_PERSON: Record<Role, { name: string; initials: string }> = {
   bendahara: { name: "Siti Rahmawati", initials: "SR" },
-  ketua: { name: "Budi Santoso", initials: "BS" },
+  pembina: { name: "Dra. Hartini, M.Pd.", initials: "HT" },
   anggota: { name: "Andi Pratama", initials: "AP" },
+  alumni: { name: "Rizky Maulana", initials: "RM" },
 };
 
 function SidebarNav({ onNavigate }: { onNavigate?: (() => void) | undefined }) {

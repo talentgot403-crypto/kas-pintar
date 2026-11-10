@@ -2,7 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { APICallError, NoObjectGeneratedError, Output, streamText } from "ai";
 import { z } from "zod";
 
-import { categoriesFor, formatRupiah, sanitizeAnalysis, type AiAnalysis, type Transaction, type TxDraft } from "../finance";
+import { categoriesFor, formatRupiah, sanitizeAnalysis, type AiAnalysis, type AiCandidate, type TxDraft } from "../finance";
 import { createLovableAiGatewayRunIdFetch, getLovableAiGatewayRunId } from "./run-id.server";
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1";
@@ -27,7 +27,7 @@ function friendlyError(status: number | undefined): string {
 export async function analyzeTransaction(
   request: Request,
   draft: TxDraft,
-  candidates: Transaction[],
+  candidates: AiCandidate[],
 ): Promise<AnalyzeResult> {
   const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) return { ok: false, error: friendlyError(401) };
