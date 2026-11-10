@@ -29,7 +29,7 @@ export async function analyzeTransaction(
   draft: TxDraft,
   candidates: Transaction[],
 ): Promise<AnalyzeResult> {
-  const apiKey = process.env.LOVABLE_API_KEY;
+  const apiKey = process.env["LOVABLE_API_KEY"];
   if (!apiKey) return { ok: false, error: friendlyError(401) };
 
   const categories = categoriesFor(draft.type) as [string, ...string[]];
