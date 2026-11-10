@@ -6,6 +6,7 @@ const now = new Date(2026, 10, 15); // 15 Nov 2026
 
 const tx = (p: Partial<Transaction>): Transaction => ({
   id: Math.random().toString(),
+  periodId: "2026-2027",
   date: "2026-11-05",
   description: "x",
   category: "Iuran",
@@ -35,7 +36,7 @@ describe("finance rules", () => {
       tx({ type: "keluar", category: "Konsumsi", amount: 400_000, date: "2026-10-20" }),
       tx({ type: "keluar", category: "Operasional", amount: 100_000 }),
     ];
-    const u = budgetUsage([{ id: "b", category: "Konsumsi", allocation: 1_200_000 }], txs, now)[0]!;
+    const u = budgetUsage([{ id: "b", periodId: "2026-2027", category: "Konsumsi", allocation: 1_200_000 }], txs, now)[0]!;
     expect(u.used).toBe(900_000);
     expect(u.percent).toBe(75);
     expect(u.remaining).toBe(300_000);
@@ -54,9 +55,9 @@ describe("finance rules", () => {
 
   it("only the treasurer can record transactions; only the chair approves; viewers cannot export", () => {
     expect(ROLES.bendahara.canCreate).toBe(true);
-    expect(ROLES.ketua.canCreate).toBe(false);
+    expect(ROLES.pembina.canCreate).toBe(false);
     expect(ROLES.anggota.canCreate).toBe(false);
-    expect(ROLES.ketua.canApprove).toBe(true);
+    expect(ROLES.pembina.canApprove).toBe(true);
     expect(ROLES.bendahara.canApprove).toBe(false);
     expect(ROLES.anggota.canExport).toBe(false);
   });

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { buildSeed, newId, ROLES, type Budget, type Role, type Transaction, type TxStatus } from "./finance";
+import { buildSeed, newId, ROLES, schoolYearOf, type Budget, type Role, type Transaction, type TxStatus } from "./finance";
 
-const STORAGE_KEY = "sikeu-data-v1";
+const STORAGE_KEY = "sikeu-data-v2";
 
 interface FinanceState {
   transactions: Transaction[];
@@ -14,10 +14,10 @@ interface FinanceContextValue extends FinanceState {
   now: Date;
   permissions: (typeof ROLES)[Role];
   setRole: (role: Role) => void;
-  addTransaction: (tx: Omit<Transaction, "id">) => void;
+  addTransaction: (tx: Omit<Transaction, "id" | "periodId">) => void;
   deleteTransaction: (id: string) => void;
   setStatus: (id: string, status: TxStatus) => void;
-  upsertBudget: (b: Omit<Budget, "id"> & { id?: string | undefined }) => void;
+  upsertBudget: (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) => void;
   deleteBudget: (id: string) => void;
   clearAll: () => void;
   loadSample: () => void;
@@ -49,8 +49,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const setRole = useCallback((role: Role) => setState((s) => ({ ...s, role })), []);
   const addTransaction = useCallback(
-    (tx: Omit<Transaction, "id">) =>
-      setState((s) => ({ ...s, transactions: [{ ...tx, id: newId() }, ...s.transactions] })),
+    (tx: Omit<Transaction, "id" | "periodId">) =>
+      setState((s) => ({
+        ...s,
+        transactions: [{ ...tx, id: newId(), periodId: schoolYearOf(new Date(`${tx.date}T00:00:00`)).id }, ...s.transactions],
+      })),
     [],
   );
   const deleteTransaction = useCallback(
@@ -66,10 +69,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [],
   );
   const upsertBudget = useCallback(
-    (b: Omit<Budget, "id"> & { id?: string | undefined }) =>
+    (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) =>
       setState((s) => {
         if (b.id) return { ...s, budgets: s.budgets.map((x) => (x.id === b.id ? { ...x, ...b, id: x.id } : x)) };
-        return { ...s, budgets: [...s.budgets, { ...b, id: newId() }] };
+        return { ...s, budgets: [...s.budgets, { ...b, id: newId("bdg"), periodId: schoolYearOf(now).id }] };
       }),
     [],
   );
