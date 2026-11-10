@@ -35,7 +35,7 @@ describe("finance rules", () => {
       tx({ type: "keluar", category: "Konsumsi", amount: 400_000, date: "2026-10-20" }),
       tx({ type: "keluar", category: "Operasional", amount: 100_000 }),
     ];
-    const [u] = budgetUsage([{ id: "b", category: "Konsumsi", allocation: 1_200_000 }], txs, now);
+    const u = budgetUsage([{ id: "b", category: "Konsumsi", allocation: 1_200_000 }], txs, now)[0]!;
     expect(u.used).toBe(900_000);
     expect(u.percent).toBe(75);
     expect(u.remaining).toBe(300_000);

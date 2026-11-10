@@ -43,7 +43,7 @@ export const ROLE_PERSON: Record<Role, { name: string; initials: string }> = {
   anggota: { name: "Andi Pratama", initials: "AP" },
 };
 
-function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarNav({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   return (
     <nav className="flex flex-col gap-1">
       {NAV.map((item) => (
@@ -76,7 +76,7 @@ function Brand() {
   );
 }
 
-function SidebarBody({ onNavigate }: { onNavigate?: () => void }) {
+function SidebarBody({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   const { role, permissions } = useFinance();
   return (
     <div className="flex h-full flex-col gap-8 bg-sidebar p-4 text-sidebar-foreground">

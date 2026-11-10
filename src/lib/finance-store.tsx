@@ -17,7 +17,7 @@ interface FinanceContextValue extends FinanceState {
   addTransaction: (tx: Omit<Transaction, "id">) => void;
   deleteTransaction: (id: string) => void;
   setStatus: (id: string, status: TxStatus) => void;
-  upsertBudget: (b: Omit<Budget, "id"> & { id?: string }) => void;
+  upsertBudget: (b: Omit<Budget, "id"> & { id?: string | undefined }) => void;
   deleteBudget: (id: string) => void;
   clearAll: () => void;
   loadSample: () => void;
@@ -66,7 +66,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     [],
   );
   const upsertBudget = useCallback(
-    (b: Omit<Budget, "id"> & { id?: string }) =>
+    (b: Omit<Budget, "id"> & { id?: string | undefined }) =>
       setState((s) => {
         if (b.id) return { ...s, budgets: s.budgets.map((x) => (x.id === b.id ? { ...x, ...b, id: x.id } : x)) };
         return { ...s, budgets: [...s.budgets, { ...b, id: newId() }] };
