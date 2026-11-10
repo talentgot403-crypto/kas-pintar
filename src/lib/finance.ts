@@ -290,3 +290,64 @@ export function buildSeed(now: Date): { transactions: Transaction[]; budgets: Bu
 
   return { transactions: txs, budgets };
 }
+
+// ---------------------------------------------------------------------------
+// Bantuan AI: saran kategori & deteksi duplikat
+// ---------------------------------------------------------------------------
+
+export interface TxDraft {
+  date: string;
+  description: string;
+  type: TxType;
+  amount: number;
+}
+
+export const DUPLICATE_WINDOW_DAYS = 30;
+export const DUPLICATE_MAX_CANDIDATES = 25;
+
+export function categoriesFor(type: TxType): readonly string[] {
+  return type === "masuk" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+}
+
+function dayDiff(a: string, b: string) {
+  return Math.abs(new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime()) / 86_400_000;
+}
+
+/**
+ * Transaksi lama yang layak dibandingkan oleh AI: jenis sama, tidak dibatalkan,
+ * dan tanggalnya dalam ±30 hari dari draf. Jumlah yang sama diprioritaskan,
+ * lalu tanggal yang paling dekat. Maksimal 25 transaksi.
+ */
+export function duplicateCandidates(draft: TxDraft, txs: Transaction[]): Transaction[] {
+  return txs
+    .filter((t) => t.type === draft.type && isCounted(t) && dayDiff(t.date, draft.date) <= DUPLICATE_WINDOW_DAYS)
+    .map((t) => ({ t, sameAmount: draft.amount > 0 && t.amount === draft.amount, gap: dayDiff(t.date, draft.date) }))
+    .sort((a, b) => Number(b.sameAmount) - Number(a.sameAmount) || a.gap - b.gap)
+    .slice(0, DUPLICATE_MAX_CANDIDATES)
+    .map((x) => x.t);
+}
+
+export type AiConfidence = "tinggi" | "sedang" | "rendah";
+
+export interface AiAnalysis {
+  category: string | null;
+  confidence: AiConfidence;
+  reason: string;
+  duplicates: { id: string; reason: string }[];
+}
+
+/** Hanya terima kategori yang sah untuk jenis transaksi & ID duplikat yang memang dikirim. */
+export function sanitizeAnalysis(raw: AiAnalysis, type: TxType, candidateIds: string[]): AiAnalysis {
+  const allowed = categoriesFor(type);
+  const ids = new Set(candidateIds);
+  const seen = new Set<string>();
+  return {
+    category: raw.category && allowed.includes(raw.category) ? raw.category : null,
+    confidence: (["tinggi", "sedang", "rendah"] as const).includes(raw.confidence) ? raw.confidence : "rendah",
+    reason: raw.reason.trim().slice(0, 240),
+    duplicates: raw.duplicates
+      .filter((d) => ids.has(d.id) && !seen.has(d.id) && seen.add(d.id))
+      .slice(0, 5)
+      .map((d) => ({ id: d.id, reason: d.reason.trim().slice(0, 200) })),
+  };
+}
