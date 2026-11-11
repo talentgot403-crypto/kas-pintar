@@ -52,3 +52,15 @@ cd <repository-name>
 npm i
 npm run dev
 ```
+# 🏛️ Sistem Kebendaharaan OSIS (Kas Pintar)
+
+Aplikasi web pencatatan keuangan dan kas OSIS berbasis React, TypeScript, dan Tailwind CSS.
+
+## 👥 Informasi Kepengurusan
+- **Periode Pembuat:** 2025/2026
+- **Status:** Aktif / Digunakan untuk pencatatan kas OSIS.
+
+## 🚀 Cara Menjalankan Proyek di Komputer Lokal:
+1. Clone repository ini:
+   ```bash
+   git clone [https://github.com/talentgot403-crypto/kas-pintar.git](https://github.com/talentgot403-crypto/kas-pintar.git)
