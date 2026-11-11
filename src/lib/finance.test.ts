@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { budgetUsage, duplicateCandidates, filterTransactions, ROLES, sanitizeAnalysis, summarize, type Transaction } from "./finance";
+import {
+  applyEdit,
+  budgetUsage,
+  duplicateCandidates,
+  filterTransactions,
+  initialStatus,
+  isEditable,
+  ROLES,
+  sanitizeAnalysis,
+  summarize,
+  type Transaction,
+} from "./finance";
 
 const now = new Date(2026, 10, 15); // 15 Nov 2026
 
@@ -93,5 +104,47 @@ describe("AI helper rules", () => {
     );
     expect(out.category).toBeNull();
     expect(out.duplicates.map((d) => d.id)).toEqual(["a"]);
+  });
+});
+
+describe("large expense approval", () => {
+  const LIMIT = 1_000_000;
+  const base = { date: "2026-11-10", description: "Sewa sound system", category: "Kegiatan", type: "keluar" as const };
+
+  it("expenses at or above the limit wait for Pembina; below it or income are done immediately", () => {
+    expect(initialStatus("keluar", 1_000_000, LIMIT)).toBe("menunggu");
+    expect(initialStatus("keluar", 999_999, LIMIT)).toBe("selesai");
+    expect(initialStatus("masuk", 5_000_000, LIMIT)).toBe("selesai");
+  });
+
+  it("changing the amount of an approved large expense sends it back for approval", () => {
+    const prev = tx({ ...base, amount: 1_400_000, status: "selesai" });
+    expect(applyEdit(prev, { ...base, amount: 1_500_000 }, LIMIT).status).toBe("menunggu");
+  });
+
+  it("editing only the description of an approved large expense keeps it approved", () => {
+    const prev = tx({ ...base, amount: 1_400_000, status: "selesai" });
+    const next = applyEdit(prev, { ...base, description: "Sewa sound system pensi", amount: 1_400_000 }, LIMIT);
+    expect(next.status).toBe("selesai");
+    expect(next.description).toBe("Sewa sound system pensi");
+  });
+
+  it("lowering a pending expense below the limit completes it; cancelled stays cancelled", () => {
+    expect(applyEdit(tx({ ...base, amount: 1_400_000, status: "menunggu" }), { ...base, amount: 900_000 }, LIMIT).status).toBe("selesai");
+    expect(applyEdit(tx({ ...base, amount: 1_400_000, status: "dibatalkan" }), { ...base, amount: 2_000_000 }, LIMIT).status).toBe("dibatalkan");
+  });
+
+  it("moves an edited transaction to the school year of its new date", () => {
+    const next = applyEdit(tx({ ...base, amount: 100_000 }), { ...base, date: "2026-06-30", amount: 100_000 }, LIMIT);
+    expect(next.periodId).toBe("2025-2026");
+  });
+
+  it("carried-over opening balances cannot be edited; the treasurer can edit, Pembina cannot but sets the limit", () => {
+    expect(isEditable(tx({ carryOver: true }))).toBe(false);
+    expect(isEditable(tx({}))).toBe(true);
+    expect(ROLES.bendahara.canEdit).toBe(true);
+    expect(ROLES.pembina.canEdit).toBe(false);
+    expect(ROLES.pembina.canConfigure).toBe(true);
+    expect(ROLES.bendahara.canConfigure).toBe(false);
   });
 });
