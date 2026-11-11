@@ -3,14 +3,13 @@ import { Check, Database, Minus, RotateCcw, Scale, Trash2 } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { ROLE_PERSON } from "@/components/app-shell";
 import { PageHeader, Panel } from "@/components/finance-ui";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatRupiah, ROLES, type Role, type RoleInfo } from "@/lib/finance";
+import { formatRupiah, personDisplay, ROLES, type Role, type RoleInfo } from "@/lib/finance";
 import { useFinance } from "@/lib/finance-store";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +38,7 @@ const PERMS: { key: keyof RoleInfo; label: string }[] = [
 ];
 
 function PenggunaPage() {
-  const { role, setRole, clearAll, loadSample, transactions } = useFinance();
+  const { role, setRole, clearAll, loadSample, transactions, people } = useFinance();
   const roles = Object.keys(ROLES) as Role[];
 
   return (
@@ -64,11 +63,11 @@ function PenggunaPage() {
               <div className="flex items-center gap-3">
                 <Avatar className="size-11">
                   <AvatarFallback className={cn("font-bold", active ? "bg-primary text-primary-foreground" : "bg-secondary")}>
-                    {ROLE_PERSON[r].initials}
+                    {personDisplay(r, people).initials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <p className="font-semibold">{ROLE_PERSON[r].name}</p>
+                  <p className="font-semibold">{personDisplay(r, people).name}</p>
                   <p className="text-xs text-muted-foreground">{ROLES[r].label}</p>
                 </div>
                 {active && <Badge variant="success">Aktif</Badge>}
@@ -133,10 +132,10 @@ function PenggunaPage() {
             className="text-destructive hover:text-destructive"
             onClick={() => {
               clearAll();
-              toast.success("Semua data dikosongkan");
+              toast.success("Saldo direset ke Rp 0", { description: "Semua transaksi, anggaran, dan nama pengguna dihapus." });
             }}
           >
-            <Trash2 /> Kosongkan data
+            <Trash2 /> Reset ke Rp 0
           </Button>
         </div>
       </Panel>

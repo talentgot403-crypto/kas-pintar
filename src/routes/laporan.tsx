@@ -42,7 +42,7 @@ const PERIOD_LABEL: Record<Period, string> = {
 };
 
 function LaporanPage() {
-  const { transactions, now, permissions } = useFinance();
+  const { transactions, now, permissions, people } = useFinance();
   const [period, setPeriod] = useState<Period>("bulan");
 
   const from = useMemo(() => {
@@ -187,11 +187,11 @@ function LaporanPage() {
             <div className="mt-8 hidden grid-cols-2 gap-8 text-center text-sm print:grid">
               <div>
                 <p>Mengetahui, Pembina OSIS</p>
-                <p className="mt-16 font-semibold">Dra. Hartini, M.Pd.</p>
+                <p className="mt-16 font-semibold">{people.pembina || "(....................)"}</p>
               </div>
               <div>
                 <p>Bendahara Utama</p>
-                <p className="mt-16 font-semibold">Siti Rahmawati</p>
+                <p className="mt-16 font-semibold">{people.bendahara || "(....................)"}</p>
               </div>
             </div>
           </>
