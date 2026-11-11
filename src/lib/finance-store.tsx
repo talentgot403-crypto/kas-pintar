@@ -4,24 +4,29 @@ import {
   applyEdit,
   buildSeed,
   DEFAULT_LARGE_EXPENSE,
+  EMPTY_PEOPLE,
+  emptyData,
   initialStatus,
   newId,
   ROLES,
+  SAMPLE_PEOPLE,
   schoolYearOf,
   type Budget,
+  type PeopleNames,
   type Role,
   type Transaction,
   type TxInput,
   type TxStatus,
 } from "./finance";
 
-const STORAGE_KEY = "sikeu-data-v2";
+const STORAGE_KEY = "sikeu-data-v3";
 
 interface FinanceState {
   transactions: Transaction[];
   budgets: Budget[];
   role: Role;
   largeExpenseThreshold: number;
+  people: PeopleNames;
 }
 
 interface FinanceContextValue extends FinanceState {
@@ -32,6 +37,7 @@ interface FinanceContextValue extends FinanceState {
   addTransaction: (tx: TxInput) => Transaction;
   updateTransaction: (id: string, patch: TxInput) => Transaction | null;
   setThreshold: (amount: number) => void;
+  setPersonName: (role: Role, name: string) => void;
   deleteTransaction: (id: string) => void;
   setStatus: (id: string, status: TxStatus) => void;
   upsertBudget: (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) => void;
@@ -44,7 +50,11 @@ const FinanceContext = createContext<FinanceContextValue | null>(null);
 
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [now] = useState(() => new Date());
-  const [state, setState] = useState<FinanceState>(() => ({ ...buildSeed(now), role: "bendahara" }));
+  const [state, setState] = useState<FinanceState>(() => ({
+    ...emptyData(),
+    role: "bendahara",
+    largeExpenseThreshold: DEFAULT_LARGE_EXPENSE,
+  }));
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -59,6 +69,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               typeof parsed.largeExpenseThreshold === "number" && parsed.largeExpenseThreshold > 0
                 ? parsed.largeExpenseThreshold
                 : DEFAULT_LARGE_EXPENSE,
+            people: { ...EMPTY_PEOPLE, ...(parsed.people ?? {}) },
           });
       }
     } catch {
@@ -99,6 +110,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (amount: number) => setState((s) => ({ ...s, largeExpenseThreshold: Math.max(1, Math.round(amount)) })),
     [],
   );
+  const setPersonName = useCallback(
+    (role: Role, name: string) => setState((s) => ({ ...s, people: { ...s.people, [role]: name.trim() } })),
+    [],
+  );
   const deleteTransaction = useCallback(
     (id: string) => setState((s) => ({ ...s, transactions: s.transactions.filter((t) => t.id !== id) })),
     [],
@@ -123,8 +138,11 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (id: string) => setState((s) => ({ ...s, budgets: s.budgets.filter((b) => b.id !== id) })),
     [],
   );
-  const clearAll = useCallback(() => setState((s) => ({ ...s, transactions: [], budgets: [] })), []);
-  const loadSample = useCallback(() => setState((s) => ({ ...s, ...buildSeed(new Date()) })), []);
+  const clearAll = useCallback(() => setState((s) => ({ ...s, ...emptyData() })), []);
+  const loadSample = useCallback(
+    () => setState((s) => ({ ...s, ...buildSeed(new Date()), people: { ...SAMPLE_PEOPLE } })),
+    [],
+  );
 
   const value = useMemo<FinanceContextValue>(
     () => ({
@@ -135,6 +153,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       addTransaction,
       updateTransaction,
       setThreshold,
+      setPersonName,
       deleteTransaction,
       setStatus,
       upsertBudget,
@@ -142,7 +161,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       clearAll,
       loadSample,
     }),
-    [state, now, setRole, addTransaction, updateTransaction, setThreshold, deleteTransaction, setStatus, upsertBudget, deleteBudget, clearAll, loadSample],
+    [state, now, setRole, addTransaction, updateTransaction, setThreshold, setPersonName, deleteTransaction, setStatus, upsertBudget, deleteBudget, clearAll, loadSample],
   );
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;

@@ -37,13 +37,6 @@ const NAV = [
   { to: "/pengguna", label: "Pengguna & Peran", icon: Users },
 ] as const;
 
-export const ROLE_PERSON: Record<Role, { name: string; initials: string }> = {
-  bendahara: { name: "Siti Rahmawati", initials: "SR" },
-  pembina: { name: "Dra. Hartini, M.Pd.", initials: "HT" },
-  anggota: { name: "Andi Pratama", initials: "AP" },
-  alumni: { name: "Rizky Maulana", initials: "RM" },
-};
-
 function SidebarNav({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
   return (
     <nav className="flex flex-col gap-1">
@@ -99,8 +92,8 @@ function SidebarBody({ onNavigate }: { onNavigate?: (() => void) | undefined }) 
 }
 
 function RoleMenu() {
-  const { role, setRole } = useFinance();
-  const person = ROLE_PERSON[role];
+  const { role, setRole, people } = useFinance();
+  const person = personDisplay(role, people);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -123,10 +116,10 @@ function RoleMenu() {
         {(Object.keys(ROLES) as Role[]).map((r) => (
           <DropdownMenuItem key={r} onClick={() => setRole(r)} className="flex items-center gap-3 py-2">
             <Avatar className="size-7">
-              <AvatarFallback className="bg-secondary text-[10px] font-bold">{ROLE_PERSON[r].initials}</AvatarFallback>
+              <AvatarFallback className="bg-secondary text-[10px] font-bold">{personDisplay(r, people).initials}</AvatarFallback>
             </Avatar>
             <div className="flex-1 leading-tight">
-              <p className="text-sm font-medium">{ROLE_PERSON[r].name}</p>
+              <p className="text-sm font-medium">{personDisplay(r, people).name}</p>
               <p className="text-xs text-muted-foreground">{ROLES[r].label}</p>
             </div>
             {r === role && <Check className="size-4 text-success" />}
