@@ -1,6 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
-import { buildSeed, newId, ROLES, schoolYearOf, type Budget, type Role, type Transaction, type TxStatus } from "./finance";
+import {
+  applyEdit,
+  buildSeed,
+  DEFAULT_LARGE_EXPENSE,
+  initialStatus,
+  newId,
+  ROLES,
+  schoolYearOf,
+  type Budget,
+  type Role,
+  type Transaction,
+  type TxInput,
+  type TxStatus,
+} from "./finance";
 
 const STORAGE_KEY = "sikeu-data-v2";
 
@@ -8,13 +21,17 @@ interface FinanceState {
   transactions: Transaction[];
   budgets: Budget[];
   role: Role;
+  largeExpenseThreshold: number;
 }
 
 interface FinanceContextValue extends FinanceState {
   now: Date;
   permissions: (typeof ROLES)[Role];
   setRole: (role: Role) => void;
-  addTransaction: (tx: Omit<Transaction, "id" | "periodId">) => void;
+  /** Status ditentukan otomatis: pengeluaran ≥ batas menunggu persetujuan Pembina. */
+  addTransaction: (tx: TxInput) => Transaction;
+  updateTransaction: (id: string, patch: TxInput) => Transaction | null;
+  setThreshold: (amount: number) => void;
   deleteTransaction: (id: string) => void;
   setStatus: (id: string, status: TxStatus) => void;
   upsertBudget: (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) => void;
@@ -35,7 +52,14 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as FinanceState;
-        if (Array.isArray(parsed.transactions) && Array.isArray(parsed.budgets)) setState(parsed);
+        if (Array.isArray(parsed.transactions) && Array.isArray(parsed.budgets))
+          setState({
+            ...parsed,
+            largeExpenseThreshold:
+              typeof parsed.largeExpenseThreshold === "number" && parsed.largeExpenseThreshold > 0
+                ? parsed.largeExpenseThreshold
+                : DEFAULT_LARGE_EXPENSE,
+          });
       }
     } catch {
       // abaikan data rusak
@@ -49,11 +73,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
 
   const setRole = useCallback((role: Role) => setState((s) => ({ ...s, role })), []);
   const addTransaction = useCallback(
-    (tx: Omit<Transaction, "id" | "periodId">) =>
-      setState((s) => ({
-        ...s,
-        transactions: [{ ...tx, id: newId(), periodId: schoolYearOf(new Date(`${tx.date}T00:00:00`)).id }, ...s.transactions],
-      })),
+    (input: TxInput) => {
+      const tx: Transaction = {
+        ...input,
+        id: newId(),
+        periodId: schoolYearOf(new Date(`${input.date}T00:00:00`)).id,
+        status: initialStatus(input.type, input.amount, state.largeExpenseThreshold),
+      };
+      setState((s) => ({ ...s, transactions: [tx, ...s.transactions] }));
+      return tx;
+    },
+    [state.largeExpenseThreshold],
+  );
+  const updateTransaction = useCallback(
+    (id: string, patch: TxInput) => {
+      const prev = state.transactions.find((t) => t.id === id);
+      if (!prev || prev.carryOver) return null;
+      const next = applyEdit(prev, patch, state.largeExpenseThreshold);
+      setState((s) => ({ ...s, transactions: s.transactions.map((t) => (t.id === id ? next : t)) }));
+      return next;
+    },
+    [state.transactions, state.largeExpenseThreshold],
+  );
+  const setThreshold = useCallback(
+    (amount: number) => setState((s) => ({ ...s, largeExpenseThreshold: Math.max(1, Math.round(amount)) })),
     [],
   );
   const deleteTransaction = useCallback(
@@ -90,6 +133,8 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       permissions: ROLES[state.role],
       setRole,
       addTransaction,
+      updateTransaction,
+      setThreshold,
       deleteTransaction,
       setStatus,
       upsertBudget,
@@ -97,7 +142,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       clearAll,
       loadSample,
     }),
-    [state, now, setRole, addTransaction, deleteTransaction, setStatus, upsertBudget, deleteBudget, clearAll, loadSample],
+    [state, now, setRole, addTransaction, updateTransaction, setThreshold, deleteTransaction, setStatus, upsertBudget, deleteBudget, clearAll, loadSample],
   );
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
