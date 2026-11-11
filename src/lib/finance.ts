@@ -715,3 +715,52 @@ export function sanitizeAnalysis(raw: AiAnalysis, type: TxType, candidateIds: st
       .map((d) => ({ id: d.id, reason: d.reason.trim().slice(0, 200) })),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Nama pengurus per peran + reset data ke kosong (saldo Rp 0)
+// ---------------------------------------------------------------------------
+
+export type PeopleNames = Record<Role, string>;
+
+export const EMPTY_PEOPLE: PeopleNames = { bendahara: "", pembina: "", anggota: "", alumni: "" };
+
+/** Nama contoh — hanya dipakai saat "Muat data contoh". */
+export const SAMPLE_PEOPLE: PeopleNames = {
+  bendahara: "Siti Rahmawati",
+  pembina: "Dra. Hartini, M.Pd.",
+  anggota: "Andi Pratama",
+  alumni: "Rizky Maulana",
+};
+
+export function initialsOf(name: string) {
+  const parts = name
+    .replace(/[^\p{L}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 1 || /\p{Lu}/u.test(w));
+  const meaningful = parts.filter((w) => !/^(dra?|drs|s|m|pd|sp|st|ir|hj?)$/i.test(w));
+  const words = meaningful.length ? meaningful : parts;
+  return words
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
+/** Nama tampilan: nama yang diisi, atau label peran bila belum diisi. */
+export function personDisplay(role: Role, people: PeopleNames | undefined) {
+  const name = (people?.[role] ?? "").trim();
+  return {
+    name: name || ROLES[role].label,
+    initials: name ? initialsOf(name) || "?" : initialsOf(ROLES[role].label),
+    filled: Boolean(name),
+  };
+}
+
+/** Data kosong: tanpa transaksi, anggaran, maupun pengguna — saldo kembali Rp 0. */
+export function emptyData() {
+  return {
+    transactions: [] as Transaction[],
+    budgets: [] as Budget[],
+    members: [] as Member[],
+    people: { ...EMPTY_PEOPLE },
+  };
+}
