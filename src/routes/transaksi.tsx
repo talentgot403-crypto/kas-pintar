@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Check, FilterX, MoreHorizontal, Plus, ReceiptText, Search, Trash2, X } from "lucide-react";
+import { Check, Clock, FilterX, MoreHorizontal, Pencil, Plus, ReceiptText, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -32,6 +32,7 @@ import {
   filterTransactions,
   formatDate,
   formatRupiah,
+  isEditable,
   totals,
   type Transaction,
   type TxType,
@@ -54,8 +55,18 @@ export const Route = createFileRoute("/transaksi")({
 });
 
 function TransaksiPage() {
-  const { transactions, permissions, setStatus, deleteTransaction, loadSample } = useFinance();
+  const { transactions, permissions, setStatus, deleteTransaction, loadSample, largeExpenseThreshold } = useFinance();
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Transaction | null>(null);
+  const openNew = () => {
+    setEditing(null);
+    setOpen(true);
+  };
+  const openEdit = (tx: Transaction) => {
+    setEditing(tx);
+    setOpen(true);
+  };
+  const pending = transactions.filter((x) => x.status === "menunggu").length;
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [type, setType] = useState<TxType | "semua">("semua");
@@ -76,7 +87,8 @@ function TransaksiPage() {
     setCategory("semua");
     setQuery("");
   };
-  const hasActions = permissions.canApprove || permissions.canDelete;
+  const hasMenu = permissions.canApprove || permissions.canDelete;
+  const hasActions = hasMenu || permissions.canEdit;
 
   const approve = (tx: Transaction, ok: boolean) => {
     setStatus(tx.id, ok ? "selesai" : "dibatalkan");
@@ -86,6 +98,13 @@ function TransaksiPage() {
   const RowActions = ({ tx }: { tx: Transaction }) => {
     if (!hasActions) return null;
     return (
+      <div className="flex items-center justify-end gap-0.5">
+        {permissions.canEdit && isEditable(tx) && (
+          <Button variant="ghost" size="icon" aria-label={`Ubah ${tx.description}`} title="Ubah" onClick={() => openEdit(tx)}>
+            <Pencil />
+          </Button>
+        )}
+        {hasMenu && (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Aksi transaksi">
@@ -111,6 +130,8 @@ function TransaksiPage() {
           )}
         </DropdownMenuContent>
       </DropdownMenu>
+        )}
+      </div>
     );
   };
 
@@ -121,12 +142,24 @@ function TransaksiPage() {
         description="Pencatatan pemasukan & pengeluaran kas organisasi."
         actions={
           permissions.canCreate && (
-            <Button onClick={() => setOpen(true)}>
+            <Button onClick={openNew}>
               <Plus /> Tambah Transaksi
             </Button>
           )
         }
       />
+
+      {pending > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-foreground">
+          <Clock className="mt-0.5 size-4 shrink-0" />
+          <p>
+            <span className="font-semibold">{pending} transaksi menunggu persetujuan Pembina.</span>{" "}
+            {permissions.canApprove
+              ? "Setujui atau batalkan lewat tombol aksi di setiap baris."
+              : `Pengeluaran mulai ${formatRupiah(largeExpenseThreshold)} perlu diverifikasi Pembina OSIS.`}
+          </p>
+        </div>
+      )}
 
       <Panel className="mb-6">
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-[1.4fr_1fr_1fr_1fr_1fr_auto] lg:items-end">
@@ -206,7 +239,7 @@ function TransaksiPage() {
             action={
               <>
                 {permissions.canCreate && (
-                  <Button onClick={() => setOpen(true)}>
+                  <Button onClick={openNew}>
                     <Plus /> Tambah Transaksi
                   </Button>
                 )}
@@ -239,7 +272,7 @@ function TransaksiPage() {
                     <TableHead>Jenis</TableHead>
                     <TableHead className="text-right">Jumlah</TableHead>
                     <TableHead>Status</TableHead>
-                    {hasActions && <TableHead className="w-12 pr-6" />}
+                    {hasActions && <TableHead className="w-24 pr-6" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -302,7 +335,7 @@ function TransaksiPage() {
         )}
       </Panel>
 
-      <TransactionDialog open={open} onOpenChange={setOpen} />
+      <TransactionDialog open={open} onOpenChange={setOpen} editing={editing} />
 
       <AlertDialog open={!!toDelete} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>

@@ -230,6 +230,24 @@ export function statusAfterEdit(
   return changed || prev.status === "menunggu" ? "menunggu" : "selesai";
 }
 
+/** Isian formulir transaksi; status & periode dihitung oleh aturan, bukan dipilih pengguna. */
+export type TxInput = Pick<Transaction, "date" | "description" | "category" | "type" | "amount">;
+
+/** Saldo awal hasil serah terima tidak boleh diubah manual. */
+export function isEditable(tx: Transaction) {
+  return !tx.carryOver;
+}
+
+/** Terapkan perubahan: periode mengikuti tanggal baru, status mengikuti aturan persetujuan. */
+export function applyEdit(prev: Transaction, patch: TxInput, threshold: number): Transaction {
+  return {
+    ...prev,
+    ...patch,
+    periodId: schoolYearOf(new Date(`${patch.date}T00:00:00`)).id,
+    status: statusAfterEdit(prev, patch, threshold),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Periode / tahun ajaran (Juli – Juni)
 // ---------------------------------------------------------------------------
