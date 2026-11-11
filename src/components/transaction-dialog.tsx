@@ -1,5 +1,5 @@
 import { format } from "date-fns";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, Loader2, Sparkles } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Check, Clock, Loader2, ShieldCheck, Sparkles } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
@@ -21,8 +21,10 @@ import {
   duplicateCandidates,
   formatDate,
   formatRupiah,
+  needsApproval,
+  statusAfterEdit,
   type AiAnalysis,
-  type TxStatus,
+  type Transaction,
   type TxType,
 } from "@/lib/finance";
 import { useFinance } from "@/lib/finance-store";
@@ -33,15 +35,23 @@ type Errors = Partial<Record<"date" | "description" | "category" | "amount", str
 
 const CONFIDENCE_LABEL = { tinggi: "Keyakinan tinggi", sedang: "Keyakinan sedang", rendah: "Keyakinan rendah" } as const;
 
-export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
-  const { addTransaction, transactions } = useFinance();
+export function TransactionDialog({
+  open,
+  onOpenChange,
+  editing = null,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  /** Isi untuk mode ubah; kosong untuk transaksi baru. */
+  editing?: Transaction | null;
+}) {
+  const { addTransaction, updateTransaction, transactions, largeExpenseThreshold } = useFinance();
   const analyze = useServerFn(suggestTransactionInsights);
   const [type, setType] = useState<TxType>("masuk");
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
-  const [status, setStatus] = useState<TxStatus>("selesai");
   const [errors, setErrors] = useState<Errors>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -49,18 +59,17 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
 
   useEffect(() => {
     if (open) {
-      setType("masuk");
-      setDate(format(new Date(), "yyyy-MM-dd"));
-      setDescription("");
-      setCategory("");
-      setAmount("");
-      setStatus("selesai");
+      setType(editing?.type ?? "masuk");
+      setDate(editing?.date ?? format(new Date(), "yyyy-MM-dd"));
+      setDescription(editing?.description ?? "");
+      setCategory(editing?.category ?? "");
+      setAmount(editing ? String(editing.amount) : "");
       setErrors({});
       setResult(null);
       setAiError("");
       setAiLoading(false);
     }
-  }, [open]);
+  }, [open, editing]);
 
   const categories = categoriesFor(type);
   const numeric = Number(amount.replace(/\D/g, ""));
@@ -68,6 +77,16 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
   // Hasil AI hanya berlaku untuk isian yang dianalisis; disembunyikan bila isian berubah.
   const inputKey = `${type}|${date}|${description.trim()}|${numeric}`;
   const analysis = result && result.key === inputKey ? result.analysis : null;
+
+  // Saat mengubah, transaksi itu sendiri bukan kandidat duplikat.
+  const others = useMemo(
+    () => (editing ? transactions.filter((t) => t.id !== editing.id) : transactions),
+    [transactions, editing],
+  );
+  const large = needsApproval(type, numeric, largeExpenseThreshold);
+  const willWait = editing
+    ? statusAfterEdit(editing, { type, amount: numeric }, largeExpenseThreshold) === "menunggu"
+    : large;
 
   const byId = useMemo(() => new Map(transactions.map((t) => [t.id, t])), [transactions]);
   const duplicateRows = (analysis?.duplicates ?? []).flatMap((d) => {
@@ -84,7 +103,7 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
     setAiError("");
     try {
       const draft = { date, description: description.trim(), type, amount: numeric };
-      const res = await analyze({ data: { draft, candidates: duplicateCandidates(draft, transactions) } });
+      const res = await analyze({ data: { draft, candidates: duplicateCandidates(draft, others) } });
       if (!res.ok) {
         setAiError(res.error);
         return;
@@ -109,10 +128,22 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
     setErrors(next);
     if (Object.keys(next).length) return;
 
-    addTransaction({ date, description: description.trim(), category, type, amount: numeric, status });
-    toast.success("Transaksi tersimpan", {
-      description: `${type === "masuk" ? "Pemasukan" : "Pengeluaran"} ${formatRupiah(numeric)} berhasil dicatat.`,
-    });
+    const input = { date, description: description.trim(), category, type, amount: numeric };
+    const saved = editing ? updateTransaction(editing.id, input) : addTransaction(input);
+    if (!saved) {
+      toast.error("Transaksi tidak dapat diubah");
+      return;
+    }
+    const label = `${type === "masuk" ? "Pemasukan" : "Pengeluaran"} ${formatRupiah(numeric)}`;
+    if (saved.status === "menunggu") {
+      toast.success(editing ? "Perubahan tersimpan" : "Transaksi tersimpan", {
+        description: `${label} menunggu persetujuan Pembina.`,
+      });
+    } else {
+      toast.success(editing ? "Perubahan tersimpan" : "Transaksi tersimpan", {
+        description: `${label} berhasil ${editing ? "diperbarui" : "dicatat"}.`,
+      });
+    }
     onOpenChange(false);
   }
 
@@ -120,8 +151,10 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tambah Transaksi</DialogTitle>
-          <DialogDescription>Catat pemasukan atau pengeluaran kas organisasi.</DialogDescription>
+          <DialogTitle>{editing ? "Ubah Transaksi" : "Tambah Transaksi"}</DialogTitle>
+          <DialogDescription>
+            {editing ? "Perbarui catatan transaksi kas organisasi." : "Catat pemasukan atau pengeluaran kas organisasi."}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={submit} className="grid gap-4" noValidate>
@@ -267,43 +300,56 @@ export function TransactionDialog({ open, onOpenChange }: { open: boolean; onOpe
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="tx-amount">Jumlah</Label>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
-                  Rp
-                </span>
-                <Input
-                  id="tx-amount"
-                  inputMode="numeric"
-                  placeholder="0"
-                  className="num pl-10"
-                  value={numeric ? numeric.toLocaleString("id-ID") : ""}
-                  onChange={(e) => setAmount(e.target.value)}
-                />
-              </div>
-              {errors.amount && <p className="text-xs text-destructive">{errors.amount}</p>}
+          <div className="grid gap-1.5">
+            <Label htmlFor="tx-amount">Jumlah</Label>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+                Rp
+              </span>
+              <Input
+                id="tx-amount"
+                inputMode="numeric"
+                placeholder="0"
+                className="num pl-10"
+                value={numeric ? numeric.toLocaleString("id-ID") : ""}
+                onChange={(e) => setAmount(e.target.value)}
+              />
             </div>
-            <div className="grid gap-1.5">
-              <Label>Status</Label>
-              <Select value={status} onValueChange={(v) => setStatus(v as TxStatus)}>
-                <SelectTrigger aria-label="Status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="selesai">Selesai</SelectItem>
-                  <SelectItem value="menunggu">Menunggu persetujuan</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {errors.amount && <p className="text-xs text-destructive">{errors.amount}</p>}
           </div>
+
+          {editing?.status === "dibatalkan" ? (
+            <p className="rounded-xl border bg-muted px-3 py-2 text-xs text-muted-foreground">
+              Transaksi ini sudah dibatalkan dan tetap berstatus Dibatalkan setelah diubah.
+            </p>
+          ) : willWait ? (
+            <div className="flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft p-3 text-sm" role="status">
+              <Clock className="mt-0.5 size-4 shrink-0 text-warning-foreground" />
+              <div className="text-warning-foreground">
+                <p className="font-semibold">Perlu persetujuan Pembina</p>
+                <p className="mt-0.5 text-xs">
+                  Pengeluaran mulai {formatRupiah(largeExpenseThreshold)} disimpan dengan status{" "}
+                  <span className="font-semibold">Menunggu</span> sampai disetujui Pembina OSIS.
+                  {editing?.status === "selesai" && " Karena jumlahnya berubah, transaksi perlu disetujui ulang."}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <ShieldCheck className="size-3.5 shrink-0 text-success" />
+              {large
+                ? "Pengeluaran besar ini sudah disetujui Pembina; mengubah keterangan, tanggal, atau kategori tidak perlu persetujuan ulang."
+                : `Langsung berstatus Selesai. Pengeluaran mulai ${formatRupiah(largeExpenseThreshold)} perlu persetujuan Pembina.`}
+            </p>
+          )}
 
           <DialogFooter className="mt-2 gap-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Batal
             </Button>
-            <Button type="submit">{duplicateRows.length > 0 ? "Tetap Simpan" : "Simpan Transaksi"}</Button>
+            <Button type="submit">
+              {duplicateRows.length > 0 ? "Tetap Simpan" : editing ? "Simpan Perubahan" : "Simpan Transaksi"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
