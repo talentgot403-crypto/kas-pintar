@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ROLES, monthLabel, type Role } from "@/lib/finance";
+import { ROLES, monthLabel, personDisplay, type Role } from "@/lib/finance";
 import { useFinance } from "@/lib/finance-store";
 import { cn } from "@/lib/utils";
 
