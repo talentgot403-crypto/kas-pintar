@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyEdit,
+  boardPeriods,
   budgetUsage,
   duplicateCandidates,
   filterTransactions,
   initialStatus,
   isEditable,
+  peopleFromMembers,
+  personDisplay,
   ROLES,
   sanitizeAnalysis,
   summarize,
+  validateMember,
+  type Member,
   type Transaction,
 } from "./finance";
 
@@ -146,5 +151,48 @@ describe("large expense approval", () => {
     expect(ROLES.pembina.canEdit).toBe(false);
     expect(ROLES.pembina.canConfigure).toBe(true);
     expect(ROLES.bendahara.canConfigure).toBe(false);
+  });
+});
+
+describe("daftar pengurus & penerus", () => {
+  const base = { name: "Nadia Putri", jabatan: "Bendahara Umum", role: "bendahara" as const, periodId: "2026-2027" };
+  const existing: Member[] = [{ ...base, id: "m1", access: "aktif" }];
+
+  it("current board is this school year and successors are the next one", () => {
+    const { current, successor } = boardPeriods(new Date(2026, 10, 12));
+    expect(current.label).toBe("2026/2027");
+    expect(successor.label).toBe("2027/2028");
+    expect(boardPeriods(new Date(2027, 5, 30)).current.label).toBe("2026/2027");
+  });
+
+  it("requires a name of at least 2 letters and a jabatan", () => {
+    expect(validateMember({ ...base, name: " A " }, [])).toBe("Nama minimal 2 huruf.");
+    expect(validateMember({ ...base, jabatan: "  " }, [])).toBe("Jabatan wajib diisi.");
+    expect(validateMember(base, [])).toBeNull();
+  });
+
+  it("allows only one Bendahara Utama per period, but the successor period can have its own", () => {
+    expect(validateMember({ ...base, name: "Raka" }, existing)).toBe("Periode ini sudah punya Bendahara Utama.");
+    expect(validateMember({ ...base, name: "Raka", periodId: "2027-2028" }, existing)).toBeNull();
+    expect(validateMember({ ...base, name: "Nadia P." }, existing, "m1")).toBeNull();
+  });
+
+  it("rejects the same name twice in one period (case-insensitive)", () => {
+    expect(validateMember({ ...base, name: "nadia  putri", role: "anggota" }, existing)).toBe(
+      "Nama ini sudah terdaftar di periode yang sama.",
+    );
+  });
+
+  it("header names come from the current period, not the successors", () => {
+    const people = peopleFromMembers(
+      [...existing, { ...base, id: "m2", name: "Raka", periodId: "2027-2028", access: "aktif" }],
+      "2026-2027",
+    );
+    expect(people.bendahara).toBe("Nadia Putri");
+    expect(people.pembina).toBe("");
+  });
+
+  it("an empty board shows only role labels", () => {
+    expect(personDisplay("bendahara", peopleFromMembers([], "2026-2027")).name).toBe("Bendahara Utama");
   });
 });

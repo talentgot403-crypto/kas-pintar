@@ -4,14 +4,16 @@ import {
   applyEdit,
   buildSeed,
   DEFAULT_LARGE_EXPENSE,
-  EMPTY_PEOPLE,
   emptyData,
   initialStatus,
   newId,
+  normalizeMember,
+  peopleFromMembers,
   ROLES,
-  SAMPLE_PEOPLE,
   schoolYearOf,
   type Budget,
+  type Member,
+  type MemberInput,
   type PeopleNames,
   type Role,
   type Transaction,
@@ -26,18 +28,24 @@ interface FinanceState {
   budgets: Budget[];
   role: Role;
   largeExpenseThreshold: number;
-  people: PeopleNames;
+  /** Daftar pengurus & penerus yang diisi sendiri oleh Bendahara. */
+  members: Member[];
 }
 
 interface FinanceContextValue extends FinanceState {
   now: Date;
+  /** Nama per peran, diambil dari daftar pengurus periode aktif. */
+  people: PeopleNames;
   permissions: (typeof ROLES)[Role];
   setRole: (role: Role) => void;
   /** Status ditentukan otomatis: pengeluaran ≥ batas menunggu persetujuan Pembina. */
   addTransaction: (tx: TxInput) => Transaction;
   updateTransaction: (id: string, patch: TxInput) => Transaction | null;
   setThreshold: (amount: number) => void;
-  setPersonName: (role: Role, name: string) => void;
+  addMember: (input: MemberInput) => Member;
+  updateMember: (id: string, input: MemberInput) => void;
+  deleteMember: (id: string) => Member | undefined;
+  restoreMember: (member: Member) => void;
   deleteTransaction: (id: string) => void;
   setStatus: (id: string, status: TxStatus) => void;
   upsertBudget: (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) => void;
@@ -51,7 +59,9 @@ const FinanceContext = createContext<FinanceContextValue | null>(null);
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [now] = useState(() => new Date());
   const [state, setState] = useState<FinanceState>(() => ({
-    ...emptyData(),
+    transactions: [],
+    budgets: [],
+    members: [],
     role: "bendahara",
     largeExpenseThreshold: DEFAULT_LARGE_EXPENSE,
   }));
@@ -69,7 +79,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
               typeof parsed.largeExpenseThreshold === "number" && parsed.largeExpenseThreshold > 0
                 ? parsed.largeExpenseThreshold
                 : DEFAULT_LARGE_EXPENSE,
-            people: { ...EMPTY_PEOPLE, ...(parsed.people ?? {}) },
+            members: Array.isArray(parsed.members) ? parsed.members : [],
           });
       }
     } catch {
@@ -110,8 +120,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (amount: number) => setState((s) => ({ ...s, largeExpenseThreshold: Math.max(1, Math.round(amount)) })),
     [],
   );
-  const setPersonName = useCallback(
-    (role: Role, name: string) => setState((s) => ({ ...s, people: { ...s.people, [role]: name.trim() } })),
+  const addMember = useCallback((input: MemberInput) => {
+    const member: Member = { ...normalizeMember(input), id: newId("usr"), access: "aktif" };
+    setState((s) => ({ ...s, members: [...s.members, member] }));
+    return member;
+  }, []);
+  const updateMember = useCallback(
+    (id: string, input: MemberInput) =>
+      setState((s) => ({
+        ...s,
+        members: s.members.map((m) => (m.id === id ? { ...m, ...normalizeMember(input) } : m)),
+      })),
+    [],
+  );
+  const deleteMember = useCallback(
+    (id: string) => {
+      const removed = state.members.find((m) => m.id === id);
+      setState((s) => ({ ...s, members: s.members.filter((m) => m.id !== id) }));
+      return removed;
+    },
+    [state.members],
+  );
+  const restoreMember = useCallback(
+    (member: Member) =>
+      setState((s) => (s.members.some((m) => m.id === member.id) ? s : { ...s, members: [...s.members, member] })),
     [],
   );
   const deleteTransaction = useCallback(
@@ -138,22 +170,30 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (id: string) => setState((s) => ({ ...s, budgets: s.budgets.filter((b) => b.id !== id) })),
     [],
   );
-  const clearAll = useCallback(() => setState((s) => ({ ...s, ...emptyData() })), []);
-  const loadSample = useCallback(
-    () => setState((s) => ({ ...s, ...buildSeed(new Date()), people: { ...SAMPLE_PEOPLE } })),
-    [],
-  );
+  const clearAll = useCallback(() => {
+    const { transactions, budgets, members } = emptyData();
+    setState((s) => ({ ...s, transactions, budgets, members }));
+  }, []);
+  const loadSample = useCallback(() => {
+    const { transactions, budgets, members } = buildSeed(new Date());
+    setState((s) => ({ ...s, transactions, budgets, members }));
+  }, []);
+  const people = useMemo(() => peopleFromMembers(state.members, schoolYearOf(now).id), [state.members, now]);
 
   const value = useMemo<FinanceContextValue>(
     () => ({
       ...state,
       now,
+      people,
       permissions: ROLES[state.role],
       setRole,
       addTransaction,
       updateTransaction,
       setThreshold,
-      setPersonName,
+      addMember,
+      updateMember,
+      deleteMember,
+      restoreMember,
       deleteTransaction,
       setStatus,
       upsertBudget,
@@ -161,7 +201,25 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       clearAll,
       loadSample,
     }),
-    [state, now, setRole, addTransaction, updateTransaction, setThreshold, setPersonName, deleteTransaction, setStatus, upsertBudget, deleteBudget, clearAll, loadSample],
+    [
+      state,
+      now,
+      people,
+      setRole,
+      addTransaction,
+      updateTransaction,
+      setThreshold,
+      addMember,
+      updateMember,
+      deleteMember,
+      restoreMember,
+      deleteTransaction,
+      setStatus,
+      upsertBudget,
+      deleteBudget,
+      clearAll,
+      loadSample,
+    ],
   );
 
   return <FinanceContext.Provider value={value}>{children}</FinanceContext.Provider>;
