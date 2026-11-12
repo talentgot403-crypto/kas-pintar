@@ -812,10 +812,9 @@ export function membersOf(members: Member[], periodId: string) {
 export function peopleFromMembers(members: Member[], periodId: string): PeopleNames {
   const people: PeopleNames = { ...EMPTY_PEOPLE };
   for (const role of ROLE_ORDER) {
-    const pool = role === "alumni" ? members : members.filter((m) => m.periodId === periodId);
-    const found = membersOf(pool, pool[0]?.periodId ?? periodId).length
-      ? pool.find((m) => m.role === role && m.access !== "dicabut")
-      : undefined;
+    const found = members.find(
+      (m) => m.role === role && m.access !== "dicabut" && (role === "alumni" || m.periodId === periodId),
+    );
     if (found) people[role] = found.name;
   }
   return people;
