@@ -764,3 +764,59 @@ export function emptyData() {
     people: { ...EMPTY_PEOPLE },
   };
 }
+
+// ---------------------------------------------------------------------------
+// Daftar pengurus & penerus (diisi sendiri oleh Bendahara)
+// ---------------------------------------------------------------------------
+
+export type MemberInput = Pick<Member, "name" | "jabatan" | "role" | "periodId">;
+
+const ROLE_ORDER: Role[] = ["bendahara", "pembina", "anggota", "alumni"];
+
+/** Periode pengurus saat ini dan periode penerusnya (tahun ajaran berikutnya). */
+export function boardPeriods(now: Date) {
+  const current = schoolYearOf(now);
+  return { current, successor: nextSchoolYear(current) };
+}
+
+/** Pesan galat bila isian pengurus tidak valid, atau null bila boleh disimpan. */
+export function validateMember(input: MemberInput, members: Member[], editingId?: string): string | null {
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (name.length < 2) return "Nama minimal 2 huruf.";
+  if (name.length > 60) return "Nama maksimal 60 karakter.";
+  if (!input.jabatan.trim()) return "Jabatan wajib diisi.";
+  const samePeriod = members.filter((m) => m.periodId === input.periodId && m.id !== editingId);
+  if (samePeriod.some((m) => m.name.trim().toLowerCase() === name.toLowerCase()))
+    return "Nama ini sudah terdaftar di periode yang sama.";
+  if (input.role === "bendahara" && samePeriod.some((m) => m.role === "bendahara"))
+    return "Periode ini sudah punya Bendahara Utama.";
+  return null;
+}
+
+export function normalizeMember(input: MemberInput): MemberInput {
+  return {
+    ...input,
+    name: input.name.trim().replace(/\s+/g, " "),
+    jabatan: input.jabatan.trim().replace(/\s+/g, " "),
+  };
+}
+
+/** Pengurus satu periode, diurutkan menurut peran lalu nama. */
+export function membersOf(members: Member[], periodId: string) {
+  return members
+    .filter((m) => m.periodId === periodId)
+    .sort((a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.name.localeCompare(b.name, "id"));
+}
+
+/** Nama yang tampil per peran: diambil dari pengurus periode aktif (alumni dari periode mana pun). */
+export function peopleFromMembers(members: Member[], periodId: string): PeopleNames {
+  const people: PeopleNames = { ...EMPTY_PEOPLE };
+  for (const role of ROLE_ORDER) {
+    const pool = role === "alumni" ? members : members.filter((m) => m.periodId === periodId);
+    const found = membersOf(pool, pool[0]?.periodId ?? periodId).length
+      ? pool.find((m) => m.role === role && m.access !== "dicabut")
+      : undefined;
+    if (found) people[role] = found.name;
+  }
+  return people;
+}
