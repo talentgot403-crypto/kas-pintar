@@ -59,7 +59,9 @@ const FinanceContext = createContext<FinanceContextValue | null>(null);
 export function FinanceProvider({ children }: { children: ReactNode }) {
   const [now] = useState(() => new Date());
   const [state, setState] = useState<FinanceState>(() => ({
-    ...emptyData(),
+    transactions: [],
+    budgets: [],
+    members: [],
     role: "bendahara",
     largeExpenseThreshold: DEFAULT_LARGE_EXPENSE,
   }));
