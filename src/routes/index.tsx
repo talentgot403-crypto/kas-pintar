@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowRight, ArrowUpRight, Database, Landmark, PiggyBank,
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 
-import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, UsageBar } from "@/components/finance-ui";
+import { BookSelect, EmptyState, PageHeader, Panel, StatCard, StatusBadge, UsageBar } from "@/components/finance-ui";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +15,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import {
+  BOOK_LABEL,
   budgetUsage,
   byCategory,
   filterTransactions,
@@ -50,7 +51,7 @@ const chartConfig = {
 const PIE_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 function Dashboard() {
-  const { transactions, budgets, now, permissions, loadSample } = useFinance();
+  const { bookTransactions: transactions, bookBudgets: budgets, book, now, permissions, loadSample } = useFinance();
   const [open, setOpen] = useState(false);
 
   const s = useMemo(() => summarize(transactions, budgets, now), [transactions, budgets, now]);
@@ -67,13 +68,16 @@ function Dashboard() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Ringkasan kondisi keuangan organisasi secara real-time."
+        description={`Ringkasan ${BOOK_LABEL[book]} secara real-time. Saldo tiap buku kas dihitung terpisah.`}
         actions={
-          permissions.canCreate && (
-            <Button onClick={() => setOpen(true)}>
-              <Plus /> Tambah Transaksi
-            </Button>
-          )
+          <>
+            <BookSelect />
+            {permissions.canCreate && (
+              <Button onClick={() => setOpen(true)}>
+                <Plus /> Tambah Transaksi
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -83,7 +87,7 @@ function Dashboard() {
         <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="flex items-center gap-2 text-sm font-medium text-primary-foreground/80">
-              <Landmark className="size-4" /> Total Saldo Kas
+              <Landmark className="size-4" /> Total Saldo {BOOK_LABEL[book]}
             </div>
             <p className="num mt-2 text-4xl font-extrabold tracking-tight sm:text-5xl">{formatRupiah(s.balance)}</p>
             <p className="mt-2 text-sm text-primary-foreground/75">
@@ -132,8 +136,8 @@ function Dashboard() {
         <Panel>
           <EmptyState
             icon={Database}
-            title="Belum ada data keuangan"
-            description="Mulai dengan mencatat transaksi pertama, atau muat data contoh untuk melihat bagaimana dashboard bekerja."
+            title={`Belum ada data di ${BOOK_LABEL[book]}`}
+            description="Mulai dengan mencatat transaksi pertama di buku kas ini, atau muat data contoh untuk melihat bagaimana dashboard bekerja."
             action={
               <>
                 {permissions.canCreate && (

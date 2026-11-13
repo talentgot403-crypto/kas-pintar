@@ -3,7 +3,7 @@ import { AlertTriangle, Pencil, PiggyBank, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, PageHeader, Panel, StatCard, UsageBar } from "@/components/finance-ui";
+import { BookSelect, EmptyState, PageHeader, Panel, StatCard, UsageBar } from "@/components/finance-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  BOOK_LABEL,
   EXPENSE_CATEGORIES,
   budgetUsage,
   formatRupiah,
@@ -45,7 +46,7 @@ const TONE_LABEL = { success: "Aman", warning: "Waspada", danger: "Kritis" } as 
 const TONE_BADGE = { success: "success", warning: "warning", danger: "danger" } as const;
 
 function AnggaranPage() {
-  const { budgets, transactions, now, permissions, deleteBudget } = useFinance();
+  const { bookBudgets: budgets, bookTransactions: transactions, book, now, permissions, deleteBudget } = useFinance();
   const [editing, setEditing] = useState<Budget | "new" | null>(null);
   const usage = useMemo(() => budgetUsage(budgets, transactions, now), [budgets, transactions, now]);
   const alloc = usage.reduce((s, b) => s + b.allocation, 0);
@@ -57,13 +58,16 @@ function AnggaranPage() {
     <>
       <PageHeader
         title="Anggaran"
-        description={`Alokasi dana per pos untuk periode ${monthLabel(now, true)}.`}
+        description={`Alokasi dana ${BOOK_LABEL[book]} per pos untuk periode ${monthLabel(now, true)}.`}
         actions={
-          permissions.canManageBudget && (
-            <Button onClick={() => setEditing("new")}>
-              <Plus /> Tambah Pos Anggaran
-            </Button>
-          )
+          <>
+            <BookSelect />
+            {permissions.canManageBudget && (
+              <Button onClick={() => setEditing("new")}>
+                <Plus /> Tambah Pos Anggaran
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -160,7 +164,7 @@ function AnggaranPage() {
 }
 
 function BudgetDialog({ editing, onClose }: { editing: Budget | "new" | null; onClose: () => void }) {
-  const { budgets, upsertBudget } = useFinance();
+  const { bookBudgets: budgets, book, upsertBudget } = useFinance();
   const [category, setCategory] = useState("");
   const [amount, setAmount] = useState("");
   const [error, setError] = useState("");
@@ -196,7 +200,7 @@ function BudgetDialog({ editing, onClose }: { editing: Budget | "new" | null; on
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{isNew ? "Tambah Pos Anggaran" : "Ubah Alokasi"}</DialogTitle>
-          <DialogDescription>Alokasi berlaku per bulan untuk kategori pengeluaran.</DialogDescription>
+          <DialogDescription>Alokasi {BOOK_LABEL[book]} berlaku per bulan untuk kategori pengeluaran.</DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="grid gap-4" noValidate>
           <div className="grid gap-1.5">

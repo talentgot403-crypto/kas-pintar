@@ -1,8 +1,10 @@
-import { ArrowDownLeft, ArrowUpRight, CheckCircle2, Clock, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BookOpen, CheckCircle2, Clock, XCircle, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { STATUS_LABEL, usageTone, type TxStatus, type TxType } from "@/lib/finance";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CASH_BOOKS, STATUS_LABEL, usageTone, type CashBook, type TxStatus, type TxType } from "@/lib/finance";
+import { useFinance } from "@/lib/finance-store";
 import { cn } from "@/lib/utils";
 
 export function PageHeader({
@@ -51,6 +53,26 @@ export function Panel({
       )}
       {children}
     </section>
+  );
+}
+
+/** Pilihan buku kas yang sedang dibuka; berlaku di Dashboard, Transaksi, Anggaran & Laporan. */
+export function BookSelect({ className }: { className?: string }) {
+  const { book, setBook } = useFinance();
+  return (
+    <Select value={book} onValueChange={(v) => setBook(v as CashBook)}>
+      <SelectTrigger aria-label="Pilih buku kas" className={cn("h-10 w-[11.5rem] bg-card font-semibold", className)}>
+        <BookOpen className="size-4 text-primary" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {CASH_BOOKS.map((b) => (
+          <SelectItem key={b.id} value={b.id}>
+            {b.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
