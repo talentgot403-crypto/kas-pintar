@@ -6,6 +6,8 @@ export type TxStatus = "selesai" | "menunggu" | "dibatalkan";
 export type Role = "bendahara" | "pembina" | "anggota" | "alumni";
 export type AccessStatus = "aktif" | "read-only" | "dicabut";
 export type PeriodStatus = "aktif" | "ditutup";
+/** Buku kas terpisah: saldo & pencatatan Kas OSIS tidak tercampur dengan Kas Angkatan. */
+export type CashBook = "osis" | "angkatan";
 
 export interface Transaction {
   id: string;
@@ -18,6 +20,8 @@ export interface Transaction {
   status: TxStatus;
   /** Saldo awal hasil serah terima dari periode sebelumnya. */
   carryOver?: boolean;
+  /** Buku kas; data lama tanpa buku dianggap Kas OSIS. */
+  book?: CashBook;
 }
 
 export interface Budget {
@@ -25,6 +29,8 @@ export interface Budget {
   periodId: string;
   category: string;
   allocation: number; // per bulan
+  /** Buku kas; anggaran lama tanpa buku dianggap Kas OSIS. */
+  book?: CashBook;
 }
 
 export interface Period {
@@ -67,6 +73,26 @@ export const EXPENSE_CATEGORIES = [
 export const CARRY_OVER_CATEGORY = "Saldo Awal";
 export const ALL_CATEGORIES = [...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 export const DEFAULT_LARGE_EXPENSE = 1_000_000;
+
+export const CASH_BOOKS: { id: CashBook; label: string; description: string }[] = [
+  { id: "osis", label: "Kas OSIS", description: "Dana organisasi OSIS" },
+  { id: "angkatan", label: "Kas Angkatan", description: "Dana angkatan siswa" },
+];
+export const BOOK_LABEL: Record<CashBook, string> = { osis: "Kas OSIS", angkatan: "Kas Angkatan" };
+
+export function isCashBook(v: unknown): v is CashBook {
+  return v === "osis" || v === "angkatan";
+}
+
+/** Buku kas sebuah transaksi/anggaran; tanpa buku = Kas OSIS. */
+export function bookOf(item: { book?: CashBook | undefined }): CashBook {
+  return item.book === "angkatan" ? "angkatan" : "osis";
+}
+
+/** Hanya data milik satu buku kas — dipakai untuk saldo, laporan, anggaran, dan ekspor. */
+export function inBook<T extends { book?: CashBook | undefined }>(items: T[], book: CashBook): T[] {
+  return items.filter((i) => bookOf(i) === book);
+}
 
 export const STATUS_LABEL: Record<TxStatus, string> = {
   selesai: "Selesai",
@@ -231,7 +257,7 @@ export function statusAfterEdit(
 }
 
 /** Isian formulir transaksi; status & periode dihitung oleh aturan, bukan dipilih pengguna. */
-export type TxInput = Pick<Transaction, "date" | "description" | "category" | "type" | "amount">;
+export type TxInput = Pick<Transaction, "date" | "description" | "category" | "type" | "amount"> & { book: CashBook };
 
 /** Saldo awal hasil serah terima tidak boleh diubah manual. */
 export function isEditable(tx: Transaction) {
@@ -430,11 +456,12 @@ export function byCategory(txs: Transaction[], type: TxType) {
 }
 
 export function toCSV(txs: Transaction[]) {
-  const head = ["Tanggal", "Keterangan", "Kategori", "Jenis", "Jumlah", "Status"];
+  const head = ["Tanggal", "Buku Kas", "Keterangan", "Kategori", "Jenis", "Jumlah", "Status"];
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const rows = txs.map((t) =>
     [
       t.date,
+      BOOK_LABEL[bookOf(t)],
       esc(t.description),
       t.category,
       t.type === "masuk" ? "Masuk" : "Keluar",
@@ -487,23 +514,28 @@ export function performHandover(state: OrgState, opts: HandoverOptions): Handove
   const { pending } = handoverBlockers(state);
   if (pending > 0) return { ok: false, error: `Masih ada ${pending} transaksi menunggu persetujuan Pembina.` };
 
-  const closingBalance = balanceOf(state.transactions.filter((t) => t.periodId === current.id));
+  const periodTxs = state.transactions.filter((t) => t.periodId === current.id);
+  const closingBalance = balanceOf(periodTxs);
   const closed: Period = { ...current, status: "ditutup", closedAt: opts.today, end: opts.today, closingBalance };
   const nominal = nextSchoolYear(current);
   const next: Period = { ...nominal, start: opts.today, status: "aktif" };
 
+  // Sisa saldo dipindahkan per buku kas, sehingga Kas OSIS & Kas Angkatan tetap terpisah.
   const transactions = [...state.transactions];
-  if (closingBalance !== 0) {
+  for (const { id: book, label } of [...CASH_BOOKS].reverse()) {
+    const bookBalance = balanceOf(inBook(periodTxs, book));
+    if (bookBalance === 0) continue;
     transactions.unshift({
       id: newId(),
       periodId: next.id,
       date: opts.today,
-      description: `Saldo awal dari periode ${current.label}`,
+      description: `Saldo awal ${label} dari periode ${current.label}`,
       category: CARRY_OVER_CATEGORY,
-      type: closingBalance > 0 ? "masuk" : "keluar",
-      amount: Math.abs(closingBalance),
+      type: bookBalance > 0 ? "masuk" : "keluar",
+      amount: Math.abs(bookBalance),
       status: "selesai",
       carryOver: true,
+      book,
     });
   }
 
@@ -620,6 +652,20 @@ export function buildSeed(now: Date): OrgState {
   add(currentSY.id, cd(10), "Transport survei lokasi LDKS", "Transportasi", "keluar", 210_000);
   add(currentSY.id, cd(10), "Pembelian printer (dibatalkan)", "Perlengkapan", "keluar", 2_300_000, "dibatalkan");
 
+  // Kas Angkatan: buku terpisah dari Kas OSIS
+  const angkatan = (date: Date, description: string, category: string, type: TxType, amount: number) => {
+    add(currentSY.id, date, description, category, type, amount);
+    txs[txs.length - 1]!.book = "angkatan";
+  };
+  for (let i = 0; i < monthsSoFar; i++) {
+    const m = addMonths(curStart, i);
+    angkatan(new Date(m.getFullYear(), m.getMonth(), 3), "Iuran kas angkatan kelas XII", "Iuran", "masuk", 900_000);
+    if (i % 2 === 1)
+      angkatan(new Date(m.getFullYear(), m.getMonth(), 16), "Konsumsi rapat panitia angkatan", "Konsumsi", "keluar", 150_000);
+  }
+  angkatan(cd(3), "Iuran kas angkatan kelas XII", "Iuran", "masuk", 900_000);
+  angkatan(cd(7), "DP cetak buku tahunan angkatan", "Perlengkapan", "keluar", 600_000);
+
   const budgetFor = (periodId: string, f: number): Budget[] => [
     { id: `bdg-${periodId}-1`, periodId, category: "Operasional", allocation: Math.round(500_000 * f) },
     { id: `bdg-${periodId}-2`, periodId, category: "Konsumsi", allocation: Math.round(700_000 * f) },
@@ -643,7 +689,12 @@ export function buildSeed(now: Date): OrgState {
     ],
     members,
     transactions: txs.filter((t) => t.date <= todayStr || t.periodId !== currentSY.id),
-    budgets: [...budgetFor(prevSY.id, 0.9), ...budgetFor(currentSY.id, 1)],
+    budgets: [
+      ...budgetFor(prevSY.id, 0.9),
+      ...budgetFor(currentSY.id, 1),
+      { id: `bdg-${currentSY.id}-a1`, periodId: currentSY.id, category: "Perlengkapan", allocation: 1_000_000, book: "angkatan" },
+      { id: `bdg-${currentSY.id}-a2`, periodId: currentSY.id, category: "Konsumsi", allocation: 300_000, book: "angkatan" },
+    ],
     currentUserId: "usr-1",
     selectedPeriodId: currentSY.id,
     largeExpenseThreshold: DEFAULT_LARGE_EXPENSE,
