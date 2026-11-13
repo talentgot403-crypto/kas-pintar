@@ -3,7 +3,7 @@ import { Check, Clock, FilterX, MoreHorizontal, Pencil, Plus, ReceiptText, Searc
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, PageHeader, Panel, StatusBadge, TypeBadge } from "@/components/finance-ui";
+import { BookSelect, EmptyState, PageHeader, Panel, StatusBadge, TypeBadge } from "@/components/finance-ui";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import {
   AlertDialog,
@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ALL_CATEGORIES,
+  BOOK_LABEL,
   filterTransactions,
   formatDate,
   formatRupiah,
@@ -55,7 +56,15 @@ export const Route = createFileRoute("/transaksi")({
 });
 
 function TransaksiPage() {
-  const { transactions, permissions, setStatus, deleteTransaction, loadSample, largeExpenseThreshold } = useFinance();
+  const {
+    bookTransactions: transactions,
+    book,
+    permissions,
+    setStatus,
+    deleteTransaction,
+    loadSample,
+    largeExpenseThreshold,
+  } = useFinance();
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Transaction | null>(null);
   const openNew = () => {
@@ -139,13 +148,16 @@ function TransaksiPage() {
     <>
       <PageHeader
         title="Transaksi"
-        description="Pencatatan pemasukan & pengeluaran kas organisasi."
+        description={`Pencatatan pemasukan & pengeluaran ${BOOK_LABEL[book]}.`}
         actions={
-          permissions.canCreate && (
-            <Button onClick={openNew}>
-              <Plus /> Tambah Transaksi
-            </Button>
-          )
+          <>
+            <BookSelect />
+            {permissions.canCreate && (
+              <Button onClick={openNew}>
+                <Plus /> Tambah Transaksi
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -153,7 +165,9 @@ function TransaksiPage() {
         <div className="mb-4 flex items-start gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-foreground">
           <Clock className="mt-0.5 size-4 shrink-0" />
           <p>
-            <span className="font-semibold">{pending} transaksi menunggu persetujuan Pembina.</span>{" "}
+            <span className="font-semibold">
+              {pending} transaksi {BOOK_LABEL[book]} menunggu persetujuan Pembina.
+            </span>{" "}
             {permissions.canApprove
               ? "Setujui atau batalkan lewat tombol aksi di setiap baris."
               : `Pengeluaran mulai ${formatRupiah(largeExpenseThreshold)} perlu diverifikasi Pembina OSIS.`}
@@ -215,7 +229,7 @@ function TransaksiPage() {
 
       <Panel
         title={`${rows.length} transaksi`}
-        description={filtered ? "Hasil sesuai filter" : "Seluruh catatan transaksi"}
+        description={filtered ? `Hasil sesuai filter · ${BOOK_LABEL[book]}` : `Seluruh catatan ${BOOK_LABEL[book]}`}
         action={
           rows.length > 0 && (
             <div className="hidden gap-4 text-right text-xs sm:flex">
@@ -234,8 +248,8 @@ function TransaksiPage() {
         {transactions.length === 0 ? (
           <EmptyState
             icon={ReceiptText}
-            title="Belum ada transaksi"
-            description="Catatan pemasukan dan pengeluaran akan muncul di sini setelah Anda menambahkannya."
+            title={`Belum ada transaksi di ${BOOK_LABEL[book]}`}
+            description="Catatan pemasukan dan pengeluaran buku kas ini akan muncul di sini setelah Anda menambahkannya."
             action={
               <>
                 {permissions.canCreate && (

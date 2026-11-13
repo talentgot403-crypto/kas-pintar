@@ -5,6 +5,8 @@ import {
   buildSeed,
   DEFAULT_LARGE_EXPENSE,
   emptyData,
+  inBook,
+  isCashBook,
   initialStatus,
   newId,
   normalizeMember,
@@ -12,6 +14,7 @@ import {
   ROLES,
   schoolYearOf,
   type Budget,
+  type CashBook,
   type Member,
   type MemberInput,
   type PeopleNames,
@@ -30,12 +33,18 @@ interface FinanceState {
   largeExpenseThreshold: number;
   /** Daftar pengurus & penerus yang diisi sendiri oleh Bendahara. */
   members: Member[];
+  /** Buku kas yang sedang dibuka (Kas OSIS / Kas Angkatan). */
+  book: CashBook;
 }
 
 interface FinanceContextValue extends FinanceState {
   now: Date;
   /** Nama per peran, diambil dari daftar pengurus periode aktif. */
   people: PeopleNames;
+  /** Transaksi & anggaran milik buku kas yang sedang dibuka saja. */
+  bookTransactions: Transaction[];
+  bookBudgets: Budget[];
+  setBook: (book: CashBook) => void;
   permissions: (typeof ROLES)[Role];
   setRole: (role: Role) => void;
   /** Status ditentukan otomatis: pengeluaran ≥ batas menunggu persetujuan Pembina. */
@@ -64,6 +73,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     members: [],
     role: "bendahara",
     largeExpenseThreshold: DEFAULT_LARGE_EXPENSE,
+    book: "osis",
   }));
   const [hydrated, setHydrated] = useState(false);
 
@@ -80,6 +90,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
                 ? parsed.largeExpenseThreshold
                 : DEFAULT_LARGE_EXPENSE,
             members: Array.isArray(parsed.members) ? parsed.members : [],
+            book: isCashBook(parsed.book) ? parsed.book : "osis",
           });
       }
     } catch {
@@ -93,6 +104,7 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
   }, [state, hydrated]);
 
   const setRole = useCallback((role: Role) => setState((s) => ({ ...s, role })), []);
+  const setBook = useCallback((book: CashBook) => setState((s) => ({ ...s, book })), []);
   const addTransaction = useCallback(
     (input: TxInput) => {
       const tx: Transaction = {
@@ -162,7 +174,10 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     (b: Omit<Budget, "id" | "periodId"> & { id?: string | undefined }) =>
       setState((s) => {
         if (b.id) return { ...s, budgets: s.budgets.map((x) => (x.id === b.id ? { ...x, ...b, id: x.id } : x)) };
-        return { ...s, budgets: [...s.budgets, { ...b, id: newId("bdg"), periodId: schoolYearOf(now).id }] };
+        return {
+          ...s,
+          budgets: [...s.budgets, { ...b, id: newId("bdg"), periodId: schoolYearOf(now).id, book: s.book }],
+        };
       }),
     [],
   );
@@ -179,12 +194,17 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, transactions, budgets, members }));
   }, []);
   const people = useMemo(() => peopleFromMembers(state.members, schoolYearOf(now).id), [state.members, now]);
+  const bookTransactions = useMemo(() => inBook(state.transactions, state.book), [state.transactions, state.book]);
+  const bookBudgets = useMemo(() => inBook(state.budgets, state.book), [state.budgets, state.book]);
 
   const value = useMemo<FinanceContextValue>(
     () => ({
       ...state,
       now,
       people,
+      bookTransactions,
+      bookBudgets,
+      setBook,
       permissions: ROLES[state.role],
       setRole,
       addTransaction,
@@ -205,6 +225,9 @@ export function FinanceProvider({ children }: { children: ReactNode }) {
       state,
       now,
       people,
+      bookTransactions,
+      bookBudgets,
+      setBook,
       setRole,
       addTransaction,
       updateTransaction,

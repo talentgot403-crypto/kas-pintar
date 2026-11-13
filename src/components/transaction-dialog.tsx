@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
+  bookOf,
+  CASH_BOOKS,
   categoriesFor,
   duplicateCandidates,
   formatDate,
@@ -24,6 +26,7 @@ import {
   needsApproval,
   statusAfterEdit,
   type AiAnalysis,
+  type CashBook,
   type Transaction,
   type TxType,
 } from "@/lib/finance";
@@ -45,9 +48,10 @@ export function TransactionDialog({
   /** Isi untuk mode ubah; kosong untuk transaksi baru. */
   editing?: Transaction | null;
 }) {
-  const { addTransaction, updateTransaction, transactions, largeExpenseThreshold } = useFinance();
+  const { addTransaction, updateTransaction, transactions, largeExpenseThreshold, book: currentBook } = useFinance();
   const analyze = useServerFn(suggestTransactionInsights);
   const [type, setType] = useState<TxType>("masuk");
+  const [book, setBook] = useState<CashBook>(currentBook);
   const [date, setDate] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -60,6 +64,7 @@ export function TransactionDialog({
   useEffect(() => {
     if (open) {
       setType(editing?.type ?? "masuk");
+      setBook(editing ? bookOf(editing) : currentBook);
       setDate(editing?.date ?? format(new Date(), "yyyy-MM-dd"));
       setDescription(editing?.description ?? "");
       setCategory(editing?.category ?? "");
@@ -69,19 +74,20 @@ export function TransactionDialog({
       setAiError("");
       setAiLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, editing]);
 
   const categories = categoriesFor(type);
   const numeric = Number(amount.replace(/\D/g, ""));
 
   // Hasil AI hanya berlaku untuk isian yang dianalisis; disembunyikan bila isian berubah.
-  const inputKey = `${type}|${date}|${description.trim()}|${numeric}`;
+  const inputKey = `${book}|${type}|${date}|${description.trim()}|${numeric}`;
   const analysis = result && result.key === inputKey ? result.analysis : null;
 
-  // Saat mengubah, transaksi itu sendiri bukan kandidat duplikat.
+  // Duplikat hanya dicari di buku kas yang sama; saat mengubah, transaksi itu sendiri bukan kandidat.
   const others = useMemo(
-    () => (editing ? transactions.filter((t) => t.id !== editing.id) : transactions),
-    [transactions, editing],
+    () => transactions.filter((t) => bookOf(t) === book && t.id !== editing?.id),
+    [transactions, editing, book],
   );
   const large = needsApproval(type, numeric, largeExpenseThreshold);
   const willWait = editing
@@ -128,13 +134,14 @@ export function TransactionDialog({
     setErrors(next);
     if (Object.keys(next).length) return;
 
-    const input = { date, description: description.trim(), category, type, amount: numeric };
+    const input = { date, description: description.trim(), category, type, amount: numeric, book };
     const saved = editing ? updateTransaction(editing.id, input) : addTransaction(input);
     if (!saved) {
       toast.error("Transaksi tidak dapat diubah");
       return;
     }
-    const label = `${type === "masuk" ? "Pemasukan" : "Pengeluaran"} ${formatRupiah(numeric)}`;
+    const bookLabel = CASH_BOOKS.find((b) => b.id === book)?.label ?? "";
+    const label = `${type === "masuk" ? "Pemasukan" : "Pengeluaran"} ${bookLabel} ${formatRupiah(numeric)}`;
     if (saved.status === "menunggu") {
       toast.success(editing ? "Perubahan tersimpan" : "Transaksi tersimpan", {
         description: `${label} menunggu persetujuan Pembina.`,
@@ -158,6 +165,22 @@ export function TransactionDialog({
         </DialogHeader>
 
         <form onSubmit={submit} className="grid gap-4" noValidate>
+          <div className="grid gap-1.5">
+            <Label>Buku Kas</Label>
+            <Select value={book} onValueChange={(v) => setBook(v as CashBook)}>
+              <SelectTrigger aria-label="Buku kas transaksi">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CASH_BOOKS.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.label} <span className="text-muted-foreground">· {b.description}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-1">
             {(
               [

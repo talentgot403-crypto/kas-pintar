@@ -4,10 +4,11 @@ import { FileSpreadsheet, FileText, Lock, Printer, ScrollText } from "lucide-rea
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { EmptyState, PageHeader, Panel } from "@/components/finance-ui";
+import { BookSelect, EmptyState, PageHeader, Panel } from "@/components/finance-ui";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  BOOK_LABEL,
   byCategory,
   filterTransactions,
   formatDate,
@@ -42,7 +43,7 @@ const PERIOD_LABEL: Record<Period, string> = {
 };
 
 function LaporanPage() {
-  const { transactions, now, permissions, people } = useFinance();
+  const { bookTransactions: transactions, book, now, permissions, people } = useFinance();
   const [period, setPeriod] = useState<Period>("bulan");
 
   const from = useMemo(() => {
@@ -69,10 +70,10 @@ function LaporanPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `laporan-keuangan-${from}-sd-${to}.csv`;
+    a.download = `laporan-${book === "osis" ? "kas-osis" : "kas-angkatan"}-${from}-sd-${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success("File Excel (CSV) diunduh");
+    toast.success(`File Excel ${BOOK_LABEL[book]} diunduh`);
   };
   const exportPdf = () =>
     toast.info("Ekspor PDF (simulasi)", { description: "Gunakan tombol Cetak lalu pilih “Simpan sebagai PDF”." });
@@ -81,9 +82,11 @@ function LaporanPage() {
     <>
       <PageHeader
         title="Laporan Keuangan"
-        description="Ringkasan arus kas per periode untuk rapat pengurus dan pertanggungjawaban."
+        description={`Ringkasan arus kas ${BOOK_LABEL[book]} per periode untuk rapat pengurus dan pertanggungjawaban.`}
         actions={
-          permissions.canExport ? (
+          <>
+          <BookSelect />
+          {permissions.canExport ? (
             <>
               <Button variant="outline" onClick={() => window.print()}>
                 <Printer /> Cetak
@@ -99,7 +102,8 @@ function LaporanPage() {
             <p className="flex items-center gap-2 rounded-full bg-muted px-3 py-1.5 text-xs text-muted-foreground">
               <Lock className="size-3.5" /> Ekspor hanya untuk Bendahara & Pembina
             </p>
-          )
+          )}
+          </>
         }
       />
 
@@ -117,7 +121,7 @@ function LaporanPage() {
         <div className="flex flex-col gap-1 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-primary">Laporan Arus Kas</p>
-            <h2 className="mt-1 text-xl font-bold">Organisasi — Kas Umum</h2>
+            <h2 className="mt-1 text-xl font-bold">OSIS — {BOOK_LABEL[book]}</h2>
           </div>
           <p className="num text-sm text-muted-foreground">
             Periode {formatDate(from)} – {formatDate(to)}
