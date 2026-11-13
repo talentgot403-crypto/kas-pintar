@@ -2,7 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyEdit,
+  balanceOf,
   boardPeriods,
+  bookOf,
+  buildSeed,
+  inBook,
+  performHandover,
+  toCSV,
   budgetUsage,
   duplicateCandidates,
   filterTransactions,
@@ -114,7 +120,13 @@ describe("AI helper rules", () => {
 
 describe("large expense approval", () => {
   const LIMIT = 1_000_000;
-  const base = { date: "2026-11-10", description: "Sewa sound system", category: "Kegiatan", type: "keluar" as const };
+  const base = {
+    date: "2026-11-10",
+    description: "Sewa sound system",
+    category: "Kegiatan",
+    type: "keluar" as const,
+    book: "osis" as const,
+  };
 
   it("expenses at or above the limit wait for Pembina; below it or income are done immediately", () => {
     expect(initialStatus("keluar", 1_000_000, LIMIT)).toBe("menunggu");
@@ -194,5 +206,59 @@ describe("daftar pengurus & penerus", () => {
 
   it("an empty board shows only role labels", () => {
     expect(personDisplay("bendahara", peopleFromMembers([], "2026-2027")).name).toBe("Bendahara Utama");
+  });
+});
+
+describe("separate cash books (Kas OSIS / Kas Angkatan)", () => {
+  it("transactions without a book belong to Kas OSIS", () => {
+    expect(bookOf(tx({}))).toBe("osis");
+    expect(bookOf(tx({ book: "angkatan" }))).toBe("angkatan");
+  });
+
+  it("each book has its own balance and monthly totals", () => {
+    const txs = [
+      tx({ amount: 2_000_000 }),
+      tx({ type: "keluar", category: "Konsumsi", amount: 500_000 }),
+      tx({ amount: 900_000, book: "angkatan" }),
+      tx({ type: "keluar", category: "Konsumsi", amount: 150_000, book: "angkatan" }),
+    ];
+    expect(balanceOf(inBook(txs, "osis"))).toBe(1_500_000);
+    expect(balanceOf(inBook(txs, "angkatan"))).toBe(750_000);
+    const s = summarize(inBook(txs, "angkatan"), [], now);
+    expect(s.incomeMonth).toBe(900_000);
+    expect(s.expenseMonth).toBe(150_000);
+  });
+
+  it("budget usage only counts expenses from the same book", () => {
+    const budgets = [{ id: "b", periodId: "2026-2027", category: "Konsumsi", allocation: 1_000_000, book: "angkatan" as const }];
+    const txs = [
+      tx({ type: "keluar", category: "Konsumsi", amount: 500_000 }),
+      tx({ type: "keluar", category: "Konsumsi", amount: 200_000, book: "angkatan" }),
+    ];
+    const [u] = budgetUsage(inBook(budgets, "angkatan"), inBook(txs, "angkatan"), now);
+    expect(u?.used).toBe(200_000);
+    expect(inBook(budgets, "osis")).toHaveLength(0);
+  });
+
+  it("Excel export labels every row with its cash book", () => {
+    const csv = toCSV([tx({ description: "Iuran", amount: 1 }), tx({ description: "Iuran XII", amount: 2, book: "angkatan" })]);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("Tanggal;Buku Kas;Keterangan;Kategori;Jenis;Jumlah;Status");
+    expect(lines[1]).toContain(";Kas OSIS;");
+    expect(lines[2]).toContain(";Kas Angkatan;");
+  });
+
+  it("handover carries each book's closing balance into its own book", () => {
+    const seed = buildSeed(now);
+    const cur = seed.periods.find((p) => p.status === "aktif")!;
+    const state = { ...seed, transactions: seed.transactions.filter((t) => t.status !== "menunggu") };
+    const osis = balanceOf(inBook(state.transactions.filter((t) => t.periodId === cur.id), "osis"));
+    const angkatan = balanceOf(inBook(state.transactions.filter((t) => t.periodId === cur.id), "angkatan"));
+    const res = performHandover(state, { newTreasurerName: "Nadia", oldMemberAccess: "read-only", copyBudgets: false, today: "2027-06-30" });
+    if (!res.ok) throw new Error(res.error);
+    const opening = res.state.transactions.filter((t) => t.periodId === res.next.id && t.carryOver);
+    expect(balanceOf(inBook(opening, "osis"))).toBe(osis);
+    expect(balanceOf(inBook(opening, "angkatan"))).toBe(angkatan);
+    expect(angkatan).toBeGreaterThan(0);
   });
 });
