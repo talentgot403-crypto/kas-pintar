@@ -294,9 +294,9 @@ describe("periode kepengurusan", () => {
     const res = startNewPeriod(data, { ...opts, oldMemberAccess: "dicabut" });
     if (!res.ok) throw new Error(res.error);
     const byId = Object.fromEntries(res.data.members.map((m) => [m.id, m]));
-    expect(byId.m1).toMatchObject({ role: "alumni", access: "dicabut" });
-    expect(byId.m2?.periodId).toBe("2027-2028");
-    expect(byId.m3).toMatchObject({ role: "bendahara", periodId: "2027-2028" });
+    expect(byId["m1"]).toMatchObject({ role: "alumni", access: "dicabut" });
+    expect(byId["m2"]?.periodId).toBe("2027-2028");
+    expect(byId["m3"]).toMatchObject({ role: "bendahara", periodId: "2027-2028" });
   });
 
   it("cannot close the books while an expense waits for Pembina approval", () => {
