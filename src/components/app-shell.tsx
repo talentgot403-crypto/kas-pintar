@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import {
+  Archive,
   ArrowLeftRight,
-  BarChart3,
+  CalendarRange,
   Check,
   ChevronDown,
   FileText,
@@ -25,7 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ROLES, monthLabel, personDisplay, type Role } from "@/lib/finance";
+import { BookSelect, PeriodSelect } from "@/components/finance-ui";
+import { formatDate, ROLES, personDisplay, type Role } from "@/lib/finance";
 import { useFinance } from "@/lib/finance-store";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +36,7 @@ const NAV = [
   { to: "/transaksi", label: "Transaksi", icon: ArrowLeftRight },
   { to: "/anggaran", label: "Anggaran", icon: PiggyBank },
   { to: "/laporan", label: "Laporan", icon: FileText },
+  { to: "/periode", label: "Periode Kepengurusan", icon: CalendarRange },
   { to: "/pengguna", label: "Pengguna & Peran", icon: Users },
 ] as const;
 
@@ -132,7 +135,7 @@ function RoleMenu() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const { now } = useFinance();
+  const { isArchive, selectedPeriod, activePeriod, setSelectedPeriod } = useFinance();
 
   return (
     <div className="min-h-screen bg-background">
@@ -148,20 +151,34 @@ export function AppShell({ children }: { children: ReactNode }) {
       </Sheet>
 
       <div className="lg:pl-64 print:pl-0">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur print:hidden sm:px-6">
+        <header className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b bg-background/85 px-4 py-3 backdrop-blur print:hidden sm:px-6">
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setOpen(true)} aria-label="Buka menu">
             <Menu />
           </Button>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <BarChart3 className="hidden size-4 sm:block" />
-            <span className="hidden sm:inline">Periode berjalan:</span>
-            <span className="font-semibold capitalize text-foreground">{monthLabel(now, true)}</span>
+          <div className="order-last flex w-full gap-2 md:order-none md:w-auto">
+            <PeriodSelect className="flex-1 md:w-[12.5rem] md:flex-none" />
+            <BookSelect className="flex-1 md:w-[11.5rem] md:flex-none" />
           </div>
           <div className="ml-auto">
             <RoleMenu />
           </div>
         </header>
-        <main className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8")}>{children}</main>
+        <main className={cn("mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8")}>
+          {isArchive && (
+            <div className="mb-6 flex flex-col gap-3 rounded-xl border border-warning/40 bg-warning-soft px-4 py-3 text-sm text-warning-foreground print:hidden sm:flex-row sm:items-center">
+              <Archive className="size-4 shrink-0" />
+              <p className="flex-1">
+                <span className="font-semibold">Arsip periode {selectedPeriod.label}</span>
+                {selectedPeriod.closedAt ? ` · ditutup ${formatDate(selectedPeriod.closedAt)}` : ""}. Data hanya bisa
+                dilihat, tidak bisa ditambah atau diubah.
+              </p>
+              <Button size="sm" variant="outline" className="bg-card" onClick={() => setSelectedPeriod(activePeriod.id)}>
+                Kembali ke {activePeriod.label}
+              </Button>
+            </div>
+          )}
+          {children}
+        </main>
       </div>
     </div>
   );

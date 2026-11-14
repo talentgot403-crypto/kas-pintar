@@ -3,7 +3,7 @@ import { AlertTriangle, Pencil, PiggyBank, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 
-import { BookSelect, EmptyState, PageHeader, Panel, StatCard, UsageBar } from "@/components/finance-ui";
+import { EmptyState, PageHeader, Panel, StatCard, UsageBar } from "@/components/finance-ui";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -61,7 +61,6 @@ function AnggaranPage() {
         description={`Alokasi dana ${BOOK_LABEL[book]} per pos untuk periode ${monthLabel(now, true)}.`}
         actions={
           <>
-            <BookSelect />
             {permissions.canManageBudget && (
               <Button onClick={() => setEditing("new")}>
                 <Plus /> Tambah Pos Anggaran

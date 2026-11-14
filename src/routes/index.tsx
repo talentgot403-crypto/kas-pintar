@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowRight, ArrowUpRight, Database, Landmark, PiggyBank,
 import { useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
 
-import { BookSelect, EmptyState, PageHeader, Panel, StatCard, StatusBadge, UsageBar } from "@/components/finance-ui";
+import { EmptyState, PageHeader, Panel, StatCard, StatusBadge, UsageBar } from "@/components/finance-ui";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -71,7 +71,6 @@ function Dashboard() {
         description={`Ringkasan ${BOOK_LABEL[book]} secara real-time. Saldo tiap buku kas dihitung terpisah.`}
         actions={
           <>
-            <BookSelect />
             {permissions.canCreate && (
               <Button onClick={() => setOpen(true)}>
                 <Plus /> Tambah Transaksi

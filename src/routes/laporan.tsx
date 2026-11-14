@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileText, Lock, Printer, ScrollText } from "lucide-rea
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { BookSelect, EmptyState, PageHeader, Panel } from "@/components/finance-ui";
+import { EmptyState, PageHeader, Panel } from "@/components/finance-ui";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -85,7 +85,6 @@ function LaporanPage() {
         description={`Ringkasan arus kas ${BOOK_LABEL[book]} per periode untuk rapat pengurus dan pertanggungjawaban.`}
         actions={
           <>
-          <BookSelect />
           {permissions.canExport ? (
             <>
               <Button variant="outline" onClick={() => window.print()}>
