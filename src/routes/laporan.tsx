@@ -8,6 +8,7 @@ import { EmptyState, PageHeader, Panel } from "@/components/finance-ui";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  balanceOf,
   BOOK_LABEL,
   byCategory,
   filterTransactions,
@@ -65,7 +66,11 @@ function LaporanPage() {
   );
 
   const rows = useMemo(() => filterTransactions(transactions, { from, to }), [transactions, from, to]);
-  const opening = useMemo(() => totals(transactions.filter((t) => t.date < from)).net, [transactions, from]);
+  // Saldo awal = saldo sebelum rentang + saldo awal periode (hasil tutup buku) di dalam rentang.
+  const opening = useMemo(
+    () => balanceOf(transactions.filter((t) => t.date < from || (t.carryOver && t.date <= to))),
+    [transactions, from, to],
+  );
   const t = totals(rows);
   const incomeCats = byCategory(rows, "masuk");
   const expenseCats = byCategory(rows, "keluar");
@@ -128,7 +133,7 @@ function LaporanPage() {
             <h2 className="mt-1 text-xl font-bold">OSIS — {BOOK_LABEL[book]} · Periode {selectedPeriod.label}</h2>
           </div>
           <p className="num text-sm text-muted-foreground">
-            Periode {formatDate(from)} – {formatDate(to)}
+            Rentang {formatDate(from)} – {formatDate(to)}
           </p>
         </div>
 
