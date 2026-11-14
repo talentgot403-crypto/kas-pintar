@@ -3,7 +3,7 @@ import { Check, Clock, FilterX, MoreHorizontal, Pencil, Plus, ReceiptText, Searc
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { BookSelect, EmptyState, PageHeader, Panel, StatusBadge, TypeBadge } from "@/components/finance-ui";
+import { EmptyState, PageHeader, Panel, StatusBadge, TypeBadge } from "@/components/finance-ui";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import {
   AlertDialog,
@@ -151,7 +151,6 @@ function TransaksiPage() {
         description={`Pencatatan pemasukan & pengeluaran ${BOOK_LABEL[book]}.`}
         actions={
           <>
-            <BookSelect />
             {permissions.canCreate && (
               <Button onClick={openNew}>
                 <Plus /> Tambah Transaksi

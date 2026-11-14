@@ -6,8 +6,11 @@ import {
   boardPeriods,
   bookOf,
   buildSeed,
+  archivePermissions,
+  ensurePeriods,
   inBook,
-  performHandover,
+  inPeriod,
+  startNewPeriod,
   toCSV,
   budgetUsage,
   duplicateCandidates,
@@ -151,9 +154,9 @@ describe("large expense approval", () => {
     expect(applyEdit(tx({ ...base, amount: 1_400_000, status: "dibatalkan" }), { ...base, amount: 2_000_000 }, LIMIT).status).toBe("dibatalkan");
   });
 
-  it("moves an edited transaction to the school year of its new date", () => {
+  it("an edited transaction stays in the period it was recorded in", () => {
     const next = applyEdit(tx({ ...base, amount: 100_000 }), { ...base, date: "2026-06-30", amount: 100_000 }, LIMIT);
-    expect(next.periodId).toBe("2025-2026");
+    expect(next.periodId).toBe("2026-2027");
   });
 
   it("carried-over opening balances cannot be edited; the treasurer can edit, Pembina cannot but sets the limit", () => {
@@ -248,17 +251,72 @@ describe("separate cash books (Kas OSIS / Kas Angkatan)", () => {
     expect(lines[2]).toContain(";Kas Angkatan;");
   });
 
-  it("handover carries each book's closing balance into its own book", () => {
+  it("closing the books can carry each book's balance into its own book", () => {
     const seed = buildSeed(now);
     const cur = seed.periods.find((p) => p.status === "aktif")!;
-    const state = { ...seed, transactions: seed.transactions.filter((t) => t.status !== "menunggu") };
-    const osis = balanceOf(inBook(state.transactions.filter((t) => t.periodId === cur.id), "osis"));
-    const angkatan = balanceOf(inBook(state.transactions.filter((t) => t.periodId === cur.id), "angkatan"));
-    const res = performHandover(state, { newTreasurerName: "Nadia", oldMemberAccess: "read-only", copyBudgets: false, today: "2027-06-30" });
+    const data = { ...seed, transactions: seed.transactions.filter((t) => t.status !== "menunggu") };
+    const own = inPeriod(data.transactions, cur.id);
+    const res = startNewPeriod(data, { carryBalance: true, oldMemberAccess: "read-only", today: "2027-06-30" });
     if (!res.ok) throw new Error(res.error);
-    const opening = res.state.transactions.filter((t) => t.periodId === res.next.id && t.carryOver);
-    expect(balanceOf(inBook(opening, "osis"))).toBe(osis);
-    expect(balanceOf(inBook(opening, "angkatan"))).toBe(angkatan);
-    expect(angkatan).toBeGreaterThan(0);
+    const opening = inPeriod(res.data.transactions, res.next.id);
+    expect(balanceOf(inBook(opening, "osis"))).toBe(balanceOf(inBook(own, "osis")));
+    expect(balanceOf(inBook(opening, "angkatan"))).toBe(balanceOf(inBook(own, "angkatan")));
+    expect(balanceOf(inBook(own, "angkatan"))).toBeGreaterThan(0);
+  });
+});
+
+describe("periode kepengurusan", () => {
+  const p2627 = { id: "2026-2027", label: "2026/2027", start: "2026-07-01", end: "2027-06-30", status: "aktif" as const };
+  const data = {
+    periods: [p2627],
+    transactions: [tx({ amount: 2_000_000 }), tx({ amount: 900_000, book: "angkatan" })],
+    budgets: [{ id: "b1", periodId: "2026-2027", category: "Konsumsi", allocation: 500_000 }],
+    members: [
+      { id: "m1", name: "Nadia", jabatan: "Bendahara Umum", role: "bendahara" as const, access: "aktif" as const, periodId: "2026-2027" },
+      { id: "m2", name: "Bu Hartini", jabatan: "Pembina OSIS", role: "pembina" as const, access: "aktif" as const, periodId: "2026-2027" },
+      { id: "m3", name: "Raka", jabatan: "Bendahara Umum", role: "bendahara" as const, access: "aktif" as const, periodId: "2027-2028" },
+    ],
+  };
+  const opts = { carryBalance: false, oldMemberAccess: "read-only" as const, today: "2027-06-28" };
+
+  it("2026/2027 → 2027/2028: the old period is archived and the new one starts from zero", () => {
+    const res = startNewPeriod(data, opts);
+    if (!res.ok) throw new Error(res.error);
+    expect(res.closed).toMatchObject({ id: "2026-2027", status: "ditutup", closedAt: "2027-06-28", closingBalance: 2_900_000 });
+    expect(res.next).toMatchObject({ id: "2027-2028", label: "2027/2028", status: "aktif" });
+    expect(res.data.periods.filter((p) => p.status === "aktif").map((p) => p.id)).toEqual(["2027-2028"]);
+    expect(inPeriod(res.data.transactions, "2027-2028")).toHaveLength(0);
+    expect(inPeriod(res.data.budgets, "2027-2028")).toHaveLength(0);
+    expect(inPeriod(res.data.transactions, "2026-2027")).toHaveLength(2);
+  });
+
+  it("the old treasurer becomes alumni, the successor and Pembina run the new period", () => {
+    const res = startNewPeriod(data, { ...opts, oldMemberAccess: "dicabut" });
+    if (!res.ok) throw new Error(res.error);
+    const byId = Object.fromEntries(res.data.members.map((m) => [m.id, m]));
+    expect(byId.m1).toMatchObject({ role: "alumni", access: "dicabut" });
+    expect(byId.m2?.periodId).toBe("2027-2028");
+    expect(byId.m3).toMatchObject({ role: "bendahara", periodId: "2027-2028" });
+  });
+
+  it("cannot close the books while an expense waits for Pembina approval", () => {
+    const res = startNewPeriod({ ...data, transactions: [tx({ type: "keluar", amount: 1_500_000, status: "menunggu" })] }, opts);
+    expect(res.ok).toBe(false);
+  });
+
+  it("archived periods are read-only for every role; export stays allowed", () => {
+    const b = archivePermissions(ROLES.bendahara, true);
+    expect([b.canCreate, b.canEdit, b.canDelete, b.canManageBudget]).toEqual([false, false, false, false]);
+    expect(archivePermissions(ROLES.pembina, true).canApprove).toBe(false);
+    expect(b.canExport).toBe(true);
+    expect(archivePermissions(ROLES.bendahara, false).canCreate).toBe(true);
+  });
+
+  it("older data without a period list: today's school year is active, earlier years become archives", () => {
+    const periods = ensurePeriods(undefined, ["2025-2026", "2026-2027", "2025-2026"], now);
+    expect(periods.map((p) => [p.id, p.status])).toEqual([
+      ["2026-2027", "aktif"],
+      ["2025-2026", "ditutup"],
+    ]);
   });
 });

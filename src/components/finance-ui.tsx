@@ -1,9 +1,9 @@
-import { ArrowDownLeft, ArrowUpRight, BookOpen, CheckCircle2, Clock, XCircle, type LucideIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, BookOpen, CalendarRange, CheckCircle2, Clock, XCircle, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CASH_BOOKS, STATUS_LABEL, usageTone, type CashBook, type TxStatus, type TxType } from "@/lib/finance";
+import { CASH_BOOKS, sortPeriods, STATUS_LABEL, usageTone, type CashBook, type TxStatus, type TxType } from "@/lib/finance";
 import { useFinance } from "@/lib/finance-store";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +69,26 @@ export function BookSelect({ className }: { className?: string }) {
         {CASH_BOOKS.map((b) => (
           <SelectItem key={b.id} value={b.id}>
             {b.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** Pilihan periode kepengurusan; periode lama tampil sebagai arsip hanya-baca. */
+export function PeriodSelect({ className }: { className?: string }) {
+  const { periods, selectedPeriodId, setSelectedPeriod } = useFinance();
+  return (
+    <Select value={selectedPeriodId} onValueChange={setSelectedPeriod}>
+      <SelectTrigger aria-label="Pilih periode kepengurusan" className={cn("h-10 w-[12.5rem] bg-card font-semibold", className)}>
+        <CalendarRange className="size-4 text-primary" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {sortPeriods(periods).map((p) => (
+          <SelectItem key={p.id} value={p.id}>
+            {p.label} · {p.status === "aktif" ? "Aktif" : "Arsip"}
           </SelectItem>
         ))}
       </SelectContent>

@@ -12,10 +12,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ACCESS_LABEL,
-  boardPeriods,
   formatRupiah,
   initialsOf,
   membersOf,
+  nextSchoolYear,
   ROLES,
   validateMember,
   type Member,
@@ -120,7 +120,7 @@ function PenggunaPage() {
             className="text-destructive hover:text-destructive"
             onClick={() => {
               clearAll();
-              toast.success("Saldo direset ke Rp 0", { description: "Semua transaksi, anggaran, dan daftar pengurus dihapus." });
+              toast.success("Saldo direset ke Rp 0", { description: "Semua transaksi, anggaran, periode arsip, dan daftar pengurus dihapus." });
             }}
           >
             <Trash2 /> Reset ke Rp 0
@@ -149,8 +149,8 @@ const ROLE_DEFAULT_JABATAN: Partial<Record<Role, string>> = {
 type Slot = "current" | "successor";
 
 function MemberSection() {
-  const { members, now, permissions, addMember, updateMember, deleteMember, restoreMember } = useFinance();
-  const { current, successor } = boardPeriods(now);
+  const { members, activePeriod: current, permissions, addMember, updateMember, deleteMember, restoreMember } = useFinance();
+  const successor = nextSchoolYear(current);
   const canManage = permissions.canManageUsers;
 
   const [editingId, setEditingId] = useState<string | null>(null);

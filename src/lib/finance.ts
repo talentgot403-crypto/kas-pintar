@@ -264,12 +264,12 @@ export function isEditable(tx: Transaction) {
   return !tx.carryOver;
 }
 
-/** Terapkan perubahan: periode mengikuti tanggal baru, status mengikuti aturan persetujuan. */
+/** Terapkan perubahan: transaksi tetap di periodenya, status mengikuti aturan persetujuan. */
 export function applyEdit(prev: Transaction, patch: TxInput, threshold: number): Transaction {
   return {
     ...prev,
     ...patch,
-    periodId: schoolYearOf(new Date(`${patch.date}T00:00:00`)).id,
+    periodId: prev.periodId,
     status: statusAfterEdit(prev, patch, threshold),
   };
 }
@@ -477,105 +477,155 @@ export function newId(prefix = "tx") {
 }
 
 // ---------------------------------------------------------------------------
-// Serah terima jabatan (tutup buku)
+// Periode kepengurusan: arsip otomatis & mulai periode baru
 // ---------------------------------------------------------------------------
 
-export interface HandoverOptions {
-  newTreasurerName: string;
-  oldMemberAccess: "read-only" | "dicabut";
-  copyBudgets: boolean;
-  today: string; // yyyy-MM-dd
+/** Data yang tersimpan per periode. */
+export interface PeriodData {
+  periods: Period[];
+  transactions: Transaction[];
+  budgets: Budget[];
+  members: Member[];
 }
 
-export type HandoverResult = { ok: true; state: OrgState; closed: Period; next: Period } | { ok: false; error: string };
+export interface NewPeriodOptions {
+  today: string; // yyyy-MM-dd
+  /** Bawa sisa saldo tiap buku kas sebagai "Saldo Awal". Tanpa ini periode baru mulai dari Rp 0. */
+  carryBalance: boolean;
+  /** Akses pengurus lama (Bendahara & Anggota) setelah periode ditutup. */
+  oldMemberAccess: "read-only" | "dicabut";
+}
 
-export function activePeriod(state: Pick<OrgState, "periods">) {
+export type NewPeriodResult =
+  | { ok: true; data: PeriodData; closed: Period; next: Period }
+  | { ok: false; error: string };
+
+export function activePeriod(state: Pick<PeriodData, "periods">) {
   return state.periods.find((p) => p.status === "aktif");
 }
 
-/** Anggota yang akan menjadi alumni saat serah terima (Pembina tetap menjabat). */
-export function outgoingMembers(state: Pick<OrgState, "members">, periodId: string) {
+/** Hanya data milik satu periode kepengurusan. */
+export function inPeriod<T extends { periodId: string }>(items: T[], periodId: string): T[] {
+  return items.filter((i) => i.periodId === periodId);
+}
+
+/** Periode terbaru di atas. */
+export function sortPeriods(periods: Period[]) {
+  return [...periods].sort((a, b) => b.id.localeCompare(a.id));
+}
+
+const PERIOD_ID = /^\d{4}-\d{4}$/;
+
+function isPeriod(v: unknown): v is Period {
+  if (!v || typeof v !== "object") return false;
+  const p = v as Partial<Period>;
+  return typeof p.id === "string" && PERIOD_ID.test(p.id) && (p.status === "aktif" || p.status === "ditutup");
+}
+
+/**
+ * Daftar periode yang sah: tepat satu periode aktif. Data lama tanpa daftar periode
+ * memakai tahun ajaran hari ini sebagai periode aktif; periode lain di data menjadi arsip.
+ */
+export function ensurePeriods(saved: unknown, periodIds: string[], now: Date): Period[] {
+  const valid = Array.isArray(saved) ? saved.filter(isPeriod) : [];
+  if (valid.filter((p) => p.status === "aktif").length === 1) return valid;
+  const active = schoolYearOf(now);
+  const closed = new Map<string, Period>();
+  for (const id of [...valid.map((p) => p.id), ...periodIds]) {
+    if (id === active.id || closed.has(id) || !PERIOD_ID.test(id)) continue;
+    const kept = valid.find((p) => p.id === id);
+    closed.set(id, kept ? { ...kept, status: "ditutup" } : { ...schoolYear(Number(id.slice(0, 4))), status: "ditutup" });
+  }
+  return [{ ...active, status: "aktif" }, ...closed.values()];
+}
+
+/** Saldo tiap buku kas. */
+export function bookBalances(txs: Transaction[]): Record<CashBook, number> {
+  return { osis: balanceOf(inBook(txs, "osis")), angkatan: balanceOf(inBook(txs, "angkatan")) };
+}
+
+/** Ringkasan satu periode: jumlah transaksi, yang menunggu persetujuan, dan saldo per buku. */
+export function periodSummary(txs: Transaction[], periodId: string) {
+  const own = inPeriod(txs, periodId);
+  return {
+    count: own.length,
+    pending: own.filter((t) => t.status === "menunggu").length,
+    balances: bookBalances(own),
+  };
+}
+
+/** Periode arsip selalu hanya-baca: tidak ada pencatatan, perubahan, persetujuan, atau anggaran. */
+export function archivePermissions(info: RoleInfo, archived: boolean): RoleInfo {
+  if (!archived) return info;
+  return { ...info, canCreate: false, canEdit: false, canDelete: false, canApprove: false, canManageBudget: false };
+}
+
+/** Anggota yang menjadi alumni saat periode ditutup (Pembina tetap menjabat). */
+export function outgoingMembers(state: Pick<PeriodData, "members">, periodId: string) {
   return state.members.filter(
     (m) => m.periodId === periodId && (m.role === "bendahara" || m.role === "anggota"),
   );
 }
 
-export function handoverBlockers(state: OrgState) {
-  const p = activePeriod(state);
-  if (!p) return { pending: 0 };
-  return { pending: state.transactions.filter((t) => t.periodId === p.id && t.status === "menunggu").length };
-}
-
-export function performHandover(state: OrgState, opts: HandoverOptions): HandoverResult {
-  const current = activePeriod(state);
+/**
+ * Tutup buku periode aktif dan mulai periode berikutnya.
+ * - Periode lama diarsipkan (hanya-baca); transaksinya tetap tersimpan.
+ * - Periode baru dimulai dari nol: tanpa transaksi & anggaran, saldo Rp 0 — kecuali
+ *   `carryBalance`, yang membawa sisa saldo tiap buku kas sebagai "Saldo Awal".
+ * - Ditolak selama masih ada transaksi menunggu persetujuan Pembina.
+ */
+export function startNewPeriod(data: PeriodData, opts: NewPeriodOptions): NewPeriodResult {
+  const current = activePeriod(data);
   if (!current) return { ok: false, error: "Tidak ada periode aktif." };
-  const name = opts.newTreasurerName.trim();
-  if (name.length < 3) return { ok: false, error: "Nama bendahara baru minimal 3 karakter." };
-  const { pending } = handoverBlockers(state);
-  if (pending > 0) return { ok: false, error: `Masih ada ${pending} transaksi menunggu persetujuan Pembina.` };
-
-  const periodTxs = state.transactions.filter((t) => t.periodId === current.id);
-  const closingBalance = balanceOf(periodTxs);
-  const closed: Period = { ...current, status: "ditutup", closedAt: opts.today, end: opts.today, closingBalance };
+  const periodTxs = inPeriod(data.transactions, current.id);
+  const pending = periodTxs.filter((t) => t.status === "menunggu").length;
+  if (pending > 0)
+    return { ok: false, error: `Masih ada ${pending} transaksi menunggu persetujuan Pembina. Selesaikan dulu sebelum tutup buku.` };
   const nominal = nextSchoolYear(current);
-  const next: Period = { ...nominal, start: opts.today, status: "aktif" };
+  if (data.periods.some((p) => p.id === nominal.id)) return { ok: false, error: `Periode ${nominal.label} sudah ada.` };
 
-  // Sisa saldo dipindahkan per buku kas, sehingga Kas OSIS & Kas Angkatan tetap terpisah.
-  const transactions = [...state.transactions];
-  for (const { id: book, label } of [...CASH_BOOKS].reverse()) {
-    const bookBalance = balanceOf(inBook(periodTxs, book));
-    if (bookBalance === 0) continue;
-    transactions.unshift({
-      id: newId(),
-      periodId: next.id,
-      date: opts.today,
-      description: `Saldo awal ${label} dari periode ${current.label}`,
-      category: CARRY_OVER_CATEGORY,
-      type: bookBalance > 0 ? "masuk" : "keluar",
-      amount: Math.abs(bookBalance),
-      status: "selesai",
-      carryOver: true,
-      book,
-    });
+  const closed: Period = { ...current, status: "ditutup", closedAt: opts.today, closingBalance: balanceOf(periodTxs) };
+  const next: Period = { ...nominal, status: "aktif" };
+
+  const carried: Transaction[] = [];
+  if (opts.carryBalance) {
+    const balances = bookBalances(periodTxs);
+    for (const { id: book, label } of CASH_BOOKS) {
+      const amount = balances[book];
+      if (amount === 0) continue;
+      carried.push({
+        id: newId(),
+        periodId: next.id,
+        date: opts.today,
+        description: `Saldo awal ${label} dari periode ${current.label}`,
+        category: CARRY_OVER_CATEGORY,
+        type: amount > 0 ? "masuk" : "keluar",
+        amount: Math.abs(amount),
+        status: "selesai",
+        carryOver: true,
+        book,
+      });
+    }
   }
 
-  const outgoing = new Set(outgoingMembers(state, current.id).map((m) => m.id));
-  const treasurer: Member = {
-    id: newId("usr"),
-    name,
-    jabatan: "Bendahara Umum",
-    role: "bendahara",
-    access: "aktif",
-    periodId: next.id,
-  };
-  const members = state.members.map((m): Member => {
+  const outgoing = new Set(outgoingMembers(data, current.id).map((m) => m.id));
+  const nextHasPembina = data.members.some((m) => m.periodId === next.id && m.role === "pembina");
+  const members = data.members.map((m): Member => {
     if (outgoing.has(m.id))
       return { ...m, role: "alumni", access: opts.oldMemberAccess, jabatan: `${m.jabatan} ${current.label}` };
-    if (m.role === "pembina" && m.periodId === current.id) return { ...m, periodId: next.id };
+    if (m.role === "pembina" && m.periodId === current.id && !nextHasPembina) return { ...m, periodId: next.id };
     return m;
   });
-
-  const budgets = opts.copyBudgets
-    ? [
-        ...state.budgets,
-        ...state.budgets
-          .filter((b) => b.periodId === current.id)
-          .map((b) => ({ ...b, id: newId("bdg"), periodId: next.id })),
-      ]
-    : state.budgets;
 
   return {
     ok: true,
     closed,
     next,
-    state: {
-      ...state,
-      periods: [...state.periods.map((p) => (p.id === current.id ? closed : p)), next],
-      transactions,
-      budgets,
-      members: [...members, treasurer],
-      currentUserId: treasurer.id,
-      selectedPeriodId: next.id,
+    data: {
+      periods: [...data.periods.map((p) => (p.id === current.id ? closed : p)), next],
+      transactions: [...carried, ...data.transactions],
+      budgets: data.budgets,
+      members,
     },
   };
 }
