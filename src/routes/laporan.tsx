@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { format, startOfMonth, startOfYear, subMonths } from "date-fns";
+import { format, startOfMonth, subMonths } from "date-fns";
 import { FileSpreadsheet, FileText, Lock, Printer, ScrollText } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -39,25 +39,30 @@ const PERIOD_LABEL: Record<Period, string> = {
   bulan: "Bulan ini",
   "3bulan": "3 bulan",
   "6bulan": "6 bulan",
-  tahun: "Tahun ini",
+  tahun: "Satu periode",
 };
 
 function LaporanPage() {
-  const { bookTransactions: transactions, book, now, permissions, people } = useFinance();
+  const { bookTransactions: transactions, book, now, refDate, selectedPeriod, permissions, people } = useFinance();
   const [period, setPeriod] = useState<Period>("bulan");
 
   const from = useMemo(() => {
     const d =
       period === "bulan"
-        ? startOfMonth(now)
+        ? startOfMonth(refDate)
         : period === "3bulan"
-          ? startOfMonth(subMonths(now, 2))
+          ? startOfMonth(subMonths(refDate, 2))
           : period === "6bulan"
-            ? startOfMonth(subMonths(now, 5))
-            : startOfYear(now);
-    return format(d, "yyyy-MM-dd");
-  }, [period, now]);
-  const to = format(now, "yyyy-MM-dd");
+            ? startOfMonth(subMonths(refDate, 5))
+            : null;
+    if (d) return format(d, "yyyy-MM-dd");
+    // Satu periode: sejak awal tahun ajaran (atau transaksi pertama bila tutup buku lebih awal).
+    return transactions.reduce((min, t) => (t.date < min ? t.date : min), selectedPeriod.start);
+  }, [period, refDate, transactions, selectedPeriod.start]);
+  const to = useMemo(
+    () => transactions.reduce((max, t) => (t.date > max ? t.date : max), format(refDate, "yyyy-MM-dd")),
+    [transactions, refDate],
+  );
 
   const rows = useMemo(() => filterTransactions(transactions, { from, to }), [transactions, from, to]);
   const opening = useMemo(() => totals(transactions.filter((t) => t.date < from)).net, [transactions, from]);
@@ -70,7 +75,7 @@ function LaporanPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `laporan-${book === "osis" ? "kas-osis" : "kas-angkatan"}-${from}-sd-${to}.csv`;
+    a.download = `laporan-${book === "osis" ? "kas-osis" : "kas-angkatan"}-periode-${selectedPeriod.id}-${from}-sd-${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success(`File Excel ${BOOK_LABEL[book]} diunduh`);
@@ -120,7 +125,7 @@ function LaporanPage() {
         <div className="flex flex-col gap-1 border-b pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider text-primary">Laporan Arus Kas</p>
-            <h2 className="mt-1 text-xl font-bold">OSIS — {BOOK_LABEL[book]}</h2>
+            <h2 className="mt-1 text-xl font-bold">OSIS — {BOOK_LABEL[book]} · Periode {selectedPeriod.label}</h2>
           </div>
           <p className="num text-sm text-muted-foreground">
             Periode {formatDate(from)} – {formatDate(to)}

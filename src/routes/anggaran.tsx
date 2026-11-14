@@ -46,7 +46,7 @@ const TONE_LABEL = { success: "Aman", warning: "Waspada", danger: "Kritis" } as 
 const TONE_BADGE = { success: "success", warning: "warning", danger: "danger" } as const;
 
 function AnggaranPage() {
-  const { bookBudgets: budgets, bookTransactions: transactions, book, now, permissions, deleteBudget } = useFinance();
+  const { bookBudgets: budgets, bookTransactions: transactions, book, refDate: now, selectedPeriod, permissions, deleteBudget } = useFinance();
   const [editing, setEditing] = useState<Budget | "new" | null>(null);
   const usage = useMemo(() => budgetUsage(budgets, transactions, now), [budgets, transactions, now]);
   const alloc = usage.reduce((s, b) => s + b.allocation, 0);
@@ -58,7 +58,7 @@ function AnggaranPage() {
     <>
       <PageHeader
         title="Anggaran"
-        description={`Alokasi dana ${BOOK_LABEL[book]} per pos untuk periode ${monthLabel(now, true)}.`}
+        description={`Alokasi dana ${BOOK_LABEL[book]} per pos · bulan ${monthLabel(now, true)}, periode ${selectedPeriod.label}.`}
         actions={
           <>
             {permissions.canManageBudget && (

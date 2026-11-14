@@ -51,7 +51,7 @@ const chartConfig = {
 const PIE_COLORS = ["var(--chart-2)", "var(--chart-1)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)"];
 
 function Dashboard() {
-  const { bookTransactions: transactions, bookBudgets: budgets, book, now, permissions, loadSample } = useFinance();
+  const { bookTransactions: transactions, bookBudgets: budgets, book, refDate: now, permissions, loadSample } = useFinance();
   const [open, setOpen] = useState(false);
 
   const s = useMemo(() => summarize(transactions, budgets, now), [transactions, budgets, now]);
